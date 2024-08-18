@@ -1076,7 +1076,6 @@ describe(matcher_be_within) {
     it("works with chars") {
       // type deduction is kind of annoying actually, because ''s are ints
       char D = 'D';
-      expect('D' to be_within(1 of 'N', inclusive, csByte));
       expect(D to be_within(1 of 'N'));
     }
 

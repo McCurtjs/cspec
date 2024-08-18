@@ -14,11 +14,11 @@ while [ "$1" != "" ]; do
       ;;
     -h | --help)
       echo ": - -- Options"
-      echo ": h help                            : prints this message"
-      echo ": t target  [wasm|clang|mingw|msvc] : sets build target"
-      echo ": r release                         : release build (default is debug)"
-      echo ": a args    \" \"                     : passes args to built exe (if any)"
-      echo ": s skip-cmake                      : skips cmake"
+      echo ": h help                                 : prints this message"
+      echo ": t target  [wasm|gcc|clang|mingw|msvc]  : sets build target"
+      echo ": r release                              : release build (default is debug)"
+      echo ": a args    \" \"                          : passes args to built exe (if any)"
+      echo ": s skip-cmake                           : skips cmake"
       exit
       ;;
     -a | --args)
@@ -138,7 +138,8 @@ elif [ "$build_target" = "gcc" ]; then
 elif [ "$build_target" = "mingw" ]; then
 
   if [ "$skip_cmake" != true ]; then
-    cmake -G "MinGW Makefiles" -S . -B build/mingw -DCMAKE_BUILD_TYPE=$build_type
+    cmake -G "MinGW Makefiles" -S . -B build/mingw \
+      -DCMAKE_BUILD_TYPE=$build_type -DCMAKE_MEMTEST=ON
     if [ "$?" != "0" ]; then
       exit
     fi
