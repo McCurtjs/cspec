@@ -19,7 +19,7 @@ if(CSPEC_MEMTEST STREQUAL ON)
   if(MSVC)
     # These link warnings get thrown because of cspec_malloc and friends defined
     # in cspec.c as they get referenced by other objs.
-    target_link_options(${PROJECT_NAME}_specs PUBLIC /IGNORE:4217,4286)
+    target_link_options(CSpec PUBLIC /IGNORE:4217,4286)
   endif()
 endif()
 
