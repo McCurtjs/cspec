@@ -33,7 +33,7 @@
 *   been an interesting excuse to see what I could get away with using macros,
 *   and the result seems to be surprisingly functional and closer to what Ruby
 *   has than other projects I've found attempting the same thing.
-* 
+*
 * To build a test with CSpec, use the following example as a baseline. In order
 *   to use memory-testing capabilities, you will need to build your source code
 *   alongside the CSpec source files in order to expose the built-in cspec
@@ -108,7 +108,7 @@ typedef struct TestSuite {
 #ifndef memory_size_max
 /*
 * \brief Test scratch-size for memory testing with malloc.
-* 
+*
 * \brief Note: This does not account for space for fences between allocations,
 *    the actual available space you can allocate will be lower.
 */
@@ -192,7 +192,7 @@ typedef struct TestSuite {
 
 /*
 * \brief Given an array of test suites, executes them all sequentially.
-* 
+*
 * \brief As the entry point to the test runner program, also handles parsing and
 *   application of command line arguments.
 */
@@ -656,7 +656,7 @@ typedef struct TestSuite {
 */
 #define c_array_foreach_index(iter, i, arr)                               \
   iter = NULL;                                                            \
-  for (csUint i = 0; i < ARRAY_COUNT(arr) ? (iter = &arr[i]), 1 : 0; ++i) //
+  for (csUint i = 0; i < ARRAY_COUNT(arr) ? (iter = (void*)&arr[i]), 1 : 0; ++i) //
 #endif
 
 #ifndef c_array_ptr_foreach_index
@@ -833,6 +833,11 @@ void    _cspec_error_typed(int line, const char* pfix, const char* fmt,
 # ifndef CSPEC_CUSTOM_TYPES
 #  define CSPEC_CUSTOM_TYPES
 # endif
+# ifdef _MSC_VER
+// MSVC has an issue that sometimes causes _Generic to throw a warning that a
+//    variable was initialized but not used. Disable that here.
+#  pragma warning ( disable : 4189 )
+# endif
 # define _type_s_lit(X, T) _Generic((&X), T**: #T"*", default: #T"[]" )
 # define _type_s_h(X, T) T: #T, T*: _type_s_lit(X, T), const T*: _type_s_lit(X, const T)
 //*
@@ -842,6 +847,8 @@ void    _cspec_error_typed(int line, const char* pfix, const char* fmt,
   _type_s_h(X, unsigned char), _type_s_h(X, unsigned short),      _type_s_h(X, unsigned int),                         \
   _type_s_h(X, unsigned long), _type_s_h(X, unsigned long long),  _type_s_h(X, float),  _type_s_h(X, double)          \
 )                                                                                                                     //
+// Adding a 'default' field can allow custom types to be used in an "expect fn to be_something given(custom1, custom2)" format
+//    but then it won't be obvious that the type is not supported, and the output will not be useful
 /*/
 // abridged version that's easier on the visual studio macro previewer, lol
 # if 0
