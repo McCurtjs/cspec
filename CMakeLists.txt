@@ -10,7 +10,7 @@ set(CSPEC_MEMTEST_DEFINES
 )
 
 add_library(CSpec)
-target_sources(CSpec PRIVATE cspec.c)
+target_sources(CSpec PRIVATE cspec.c cspec.h)
 target_include_directories(CSpec PUBLIC ./)
 
 if(CSPEC_MEMTEST STREQUAL ON)
