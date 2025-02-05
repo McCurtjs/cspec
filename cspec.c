@@ -36,48 +36,31 @@
 #include "cspec.h"
 
 #ifdef __WASM__
-typedef enum {
-  CONCOL_Black = 0x0000000,
-  CONCOL_Red = 0x0ff0000,
-  CONCOL_Green = 0x000ff00,
-  CONCOL_Yellow = 0x0ffff00,
-  CONCOL_Blue = 0x00000ff,
-  CONCOL_Purple = 0x0ff00ff,
-  CONCOL_Cyan = 0x000ffff,
-  CONCOL_White = 0x0ffffff,
-  CONCOL_bBlack = 0x1000000,
-  CONCOL_bRed = 0x1ff0000,
-  CONCOL_bGreen = 0x100ff00,
-  CONCOL_bYellow = 0x1ffff00,
-  CONCOL_bBlue = 0x10000ff,
-  CONCOL_bPurple = 0x1ff00ff,
-  CONCOL_bCyan = 0x100ffff,
-  CONCOL_bWhite = 0x1ffffff,
-} ConsoleColor;
+# define CONCOL(Color, CON, HEX) MACRO_CONCAT(CONCOL_, Color) = HEX
 extern void js_log(const char* str, unsigned int len, ConsoleColor color);
-
 #else
+# define CONCOL(Color, CON, HEX) MACRO_CONCAT(CONCOL_, Color) = CON
 extern int puts(const char* s);
-
-typedef enum {
-  CONCOL_Black   = 30, /* \033[0;30m */
-  CONCOL_Red     = 31, /* \033[0;31m */
-  CONCOL_Green   = 32, /* \033[0;32m */
-  CONCOL_Yellow  = 33, /* \033[0;33m */
-  CONCOL_Blue    = 34, /* \033[0;34m */
-  CONCOL_Purple  = 35, /* \033[0;35m */
-  CONCOL_Cyan    = 36, /* \033[0;36m */
-  CONCOL_White   = 37, /* \033[0;37m */
-  CONCOL_bBlack  = 40, /* \033[1;30m */
-  CONCOL_bRed    = 41, /* \033[1;31m */
-  CONCOL_bGreen  = 42, /* \033[1;32m */
-  CONCOL_bYellow = 43, /* \033[1;33m */
-  CONCOL_bBlue   = 44, /* \033[1;34m */
-  CONCOL_bPurple = 45, /* \033[1;35m */
-  CONCOL_bCyan   = 46, /* \033[1;36m */
-  CONCOL_bWhite  = 47, /* \033[1;37m */
-} ConsoleColor;
 #endif
+
+typedef enum ConsoleColor {
+  CONCOL(Black,   30, 0x0000000),
+  CONCOL(Red,     31, 0x0ff0000),
+  CONCOL(Green,   32, 0x000ff00),
+  CONCOL(Yellow,  33, 0x0ffff00),
+  CONCOL(Blue,    34, 0x00000ff),
+  CONCOL(Purple,  35, 0x0ff00ff),
+  CONCOL(Cyan,    36, 0x000ffff),
+  CONCOL(White,   37, 0x0ffffff),
+  CONCOL(bBlack,  40, 0x1000000),
+  CONCOL(bRed,    41, 0x1ff0000),
+  CONCOL(bGreen,  42, 0x100ff00),
+  CONCOL(bYellow, 43, 0x1ffff00),
+  CONCOL(bBlue,   44, 0x10000ff),
+  CONCOL(bPurple, 45, 0x1ff00ff),
+  CONCOL(bCyan,   46, 0x100ffff),
+  CONCOL(bWhite,  47, 0x1ffffff)
+} ConsoleColor;
 
 typedef enum PrintLevel {
   NOT_PRINTED = 0,
@@ -92,33 +75,35 @@ typedef enum Verbosity {
   V_VERY    /* -va prints everything, even headers of tests that aren't run */
 } Verbosity;
 
-// TODO: take all these and split them into a meta-context object so we
-// can at least pretend to be thread-safe.
-static const TestSuite* current_suite = NULL;
-static const TestGroup* test_function = NULL;
-static const char* test_description = NULL;
-static PrintLevel test_desc_printed = NOT_PRINTED;
-static csBool test_filename_printed = FALSE;
-static csBool test_function_printed = FALSE;
-static csBool test_failed = FALSE;
-static csBool test_warned = FALSE;
-static csBool test_in_function = FALSE;
-static csBool test_in_progress = FALSE;
-static csBool test_expect_fail = FALSE;
-static csBool test_skip = FALSE;
-static int test_current_line = 0;
-static int test_count = 0;
-static int test_passed_count = 0;
-static int test_warnings_count = 0;
+static struct InputParams {
+  int tabsize;              /* -t [n] */
+  const char* file;         /* filename */
+  int line;                 /* filename:l or :l */
+  Verbosity verbose;        /* -v or -V or -n */
+  csBool padding;           /* -p [n] */
+  csBool no_expect_fail;    /* -f */
+  csBool skip_memory_test;  /* -m */
+  csBool show_types;        /* -s */
+} param = { 2 };
 
-static const char* param_file = NULL;       /* filename */
-static int param_line = 0;                  /* filename:l or :l */
-static Verbosity param_verbose = V_NONE;    /* -v or -va or -vn */
-static int param_tabsize = 2;               /* -t [n] */
-static csBool param_padding = FALSE;        /* -p */
-static csBool param_no_expect_fail = FALSE; /* -f */
-static csBool param_memory_test = TRUE;     /* -m (to disable) */
-static csBool param_show_types = FALSE;     /* -s */
+static struct TestContext {
+  const TestSuite* suite;
+  const TestGroup* function;
+  const char* description;
+  PrintLevel printed_description;
+  csBool printed_filename;
+  csBool printed_function;
+  csBool failed;
+  csBool warned;
+  csBool in_function;
+  csBool in_progress;
+  csBool expect_fail;
+  csBool skip;
+  int current_line;
+  int count;
+  int count_passed;
+  int count_warnings;
+} test = { 0 };
 
 /*----------------------------------------------------------------------------*\
   Useful functions when we don't have a standrad library to rely on
@@ -134,8 +119,8 @@ void cspec_memcpy(void* s_, const void* t_, csSize n) {
   while (n--) *(s++) = *(t++);
 }
 
-csBool cspec_strcmp(const char* A, const char* B) {
-  if (!A && !B) return TRUE;
+csBool cspec_streq(const char* A, const char* B) {
+  if (A == B) return TRUE;
   if (!A || !B) return FALSE;
   while (*A && *B) {
     if (*A++ != *B++) return FALSE;
@@ -227,7 +212,7 @@ static void output_str(const char* s) {
 
     if (*s == '%') {
       if (*(s + 1) == 'n') {
-        if (param_padding) {
+        if (param.padding) {
           output_buffer[output_index++] = '\n';
         }
         prev = ' ';
@@ -487,7 +472,7 @@ static int memory_malloc_forced_failures = 0;
 #define memory_records_grow_factor 1.5f
 
 static void memory_print_row(const csByte* row, int level, csBool target) {
-  output_pad(param_tabsize * level, ' ');
+  output_pad(param.tabsize * level, ' ');
   output_ptr(row);
   if (target) output_str("-> "); else output_str(":  ");
   for (int i = 0; i < 16; ++i) {
@@ -519,7 +504,7 @@ static void memory_print_record(const MemoryRecord* record, int level) {
     memory_print_row(record->block + i - 16 + memory_size_fence, level, i == 16);
     i += 16;
   }
-  if (param_padding) output_print();
+  if (param.padding) output_print();
 }
 
 static csBool memory_check_fence(MemoryRecord* record) {
@@ -547,8 +532,8 @@ static int print_headers(
   int desc_color, PrintLevel desc_level, const char* to_append);
 
 void _cspec_memory_log_block(int line, const void* ptr) {
-  if ((test_current_line && test_current_line >= line)
-  || param_verbose < V_NOTES
+  if ((test.current_line && test.current_line >= line)
+  || param.verbose < V_NOTES
   ) {
     return;
   }
@@ -564,7 +549,7 @@ void _cspec_memory_log_block(int line, const void* ptr) {
 
   int level = print_headers(CONCOL_bWhite, LOGGED, NULL);
 
-  if (param_padding) output_print();
+  if (param.padding) output_print();
 
   if (record) {
     memory_print_record(record, level);
@@ -643,9 +628,9 @@ static void memory_final_checks(void) {
   /* Ensure malloc / free parity */
   if (memory_count_mallocs != memory_count_frees) {
     int level = _cspec_error_mem("after: mismatched malloc/free calls", NULL);
-    if (test_in_progress) {
+    if (test.in_progress) {
       if (!memory_expect_error) {
-        output_pad(param_tabsize * level + 21, ' ');
+        output_pad(param.tabsize * level + 21, ' ');
         output_str("mallocs: {}, frees: {}%n");
         output_sint(memory_count_mallocs);
         output_sint(memory_count_frees);
@@ -667,12 +652,12 @@ static void memory_final_checks(void) {
 }
 
 void* cspec_malloc(size_t size) {
-  if (!memory_records || !test_in_function) {
+  if (!memory_records || !test.in_function) {
     /* ++memory_count_mallocs; */
     void* ret = malloc(size);
 
     /* Still set the memory with memtesting off */
-    if (test_in_function) {
+    if (test.in_function) {
       cspec_memset(ret, 'X', size);
     }
 
@@ -748,7 +733,7 @@ void* cspec_malloc(size_t size) {
 void cspec_free(void* mem_) {
   csByte* mem = mem_;
 
-  if (!memory_records || !test_in_function) {
+  if (!memory_records || !test.in_function) {
     /* ++memory_count_frees; */
     free(mem);
     return;
@@ -799,7 +784,7 @@ void cspec_free(void* mem_) {
 }
 
 void* cspec_calloc(size_t ct, size_t sel) {
-  if (!memory_records || !test_in_function) {
+  if (!memory_records || !test.in_function) {
     return calloc(ct, sel);
   }
 
@@ -811,7 +796,7 @@ void* cspec_calloc(size_t ct, size_t sel) {
 }
 
 void* cspec_realloc(void* mem, size_t nsize) {
-  if (!memory_records || !test_in_function) {
+  if (!memory_records || !test.in_function) {
     /* if (mem == NULL) ++memory_count_mallocs; */
     return realloc(mem, nsize);
   }
@@ -940,7 +925,7 @@ csBool _cspec_context_begin(int line, const char* desc) {
   * If we are currently executing a test, skip the context (allow previous
   * contexts to close out their post-test statements)
   */
-  if (test_in_progress) {
+  if (test.in_progress) {
     return FALSE;
   }
 
@@ -967,7 +952,7 @@ csBool _cspec_context_begin(int line, const char* desc) {
   * If we're not on the stack anymore, and the current test line is past our
   * context, we've completed the tests in it and can skip it.
   */
-  if (test_current_line > line) {
+  if (test.current_line > line) {
     return FALSE;
   }
 
@@ -982,16 +967,16 @@ csBool _cspec_context_begin(int line, const char* desc) {
   * tests in this context, and end the tests as soon as it's popped.
   */
   csBool is_requested = FALSE;
-  if (line == param_line) {
+  if (line == param.line) {
     is_requested = TRUE;
-    param_line = 0;
+    param.line = 0;
   }
 
   /*
   * When this is added to the stack, we can set it as the current line.
   * (not strictly necessary, but good for bookkeeping?)
   */
-  test_current_line = line;
+  test.current_line = line;
 
   /* Make sure we won't overflow the stack if we add another context */
   if (ctx_stack_top + 1 >= cspec_ctx_stack_size_max) {
@@ -1024,7 +1009,7 @@ csBool _cspec_context_end(int line) {
   * didn't actually run any tests in this pass. Otherwise, return false to
   * keep executing within this context.
   */
-  if (test_in_progress) {
+  if (test.in_progress) {
     return FALSE;
   }
 
@@ -1032,8 +1017,8 @@ csBool _cspec_context_end(int line) {
   * Sanity check - this generally shouldn't be possible to hit?
   */
   /*
-  assert(test_current_line < line);
-  if (test_current_line >= line) {
+  assert(test.current_line < line);
+  if (test.current_line >= line) {
     return FALSE;
   }
   */
@@ -1046,7 +1031,7 @@ csBool _cspec_context_end(int line) {
   * empty), which is ok because as long as it's above the context line
   * the entire block will be skipped.
   */
-  test_current_line = line + 1;
+  test.current_line = line + 1;
 
   /*
   * Once we pop a specifically requested context, end the tests.
@@ -1054,7 +1039,7 @@ csBool _cspec_context_end(int line) {
   * the descriptions of un-run tests.
   */
   if (ctx_stack[ctx_stack_top].requested_context) {
-    param_line = -1;
+    param.line = -1;
   }
 
   /* Make sure we're not trying to pop the stack root */
@@ -1080,19 +1065,19 @@ static int print_headers(
   int desc_color, PrintLevel desc_level, const char* to_append
 ) {
 
-  if (!test_filename_printed) {
-    output_str(current_suite->header);
+  if (!test.printed_filename) {
+    output_str(test.suite->header);
     output_print_color(CONCOL_bPurple);
-    test_filename_printed = TRUE;
+    test.printed_filename = TRUE;
   }
 
-  if (!test_function_printed) {
-    output_pad(param_tabsize, ' ');
+  if (!test.printed_function) {
+    output_pad(param.tabsize, ' ');
     output_str("in function ({}):%c test_");
-    output_sint(*test_function->line);
-    output_str(test_function->header);
+    output_sint(*test.function->line);
+    output_str(test.function->header);
     output_print_color(CONCOL_bCyan);
-    test_function_printed = TRUE;
+    test.printed_function = TRUE;
   }
 
   Context* ctx;
@@ -1100,7 +1085,7 @@ static int print_headers(
   for (int i = 1; i <= ctx_stack_top; ++i) {
     ctx = &ctx_stack[i];
     if (!ctx->printed) {
-      output_pad(param_tabsize * level, ' ');
+      output_pad(param.tabsize * level, ' ');
       output_str(ctx->desc);
       output_print_color(CONCOL_Cyan);
       ctx->printed = TRUE;
@@ -1108,19 +1093,19 @@ static int print_headers(
     ++level;
   }
 
-  if (test_desc_printed < desc_level) {
-    output_pad(param_tabsize * level, ' ');
+  if (test.printed_description < desc_level) {
+    output_pad(param.tabsize * level, ' ');
 
-    if (!test_in_progress) {
+    if (!test.in_progress) {
       output_str("pre-test");
       output_print();
-      test_desc_printed = PRINTED;
+      test.printed_description = PRINTED;
 
     } else {
-      output_str(test_description);
+      output_str(test.description);
       output_str(to_append ? to_append : NULL); /* may be null */
       output_print_color(desc_color);
-      test_desc_printed = desc_level;
+      test.printed_description = desc_level;
     }
   }
 
@@ -1128,13 +1113,13 @@ static int print_headers(
 }
 
 void _cspec_log_fn(int line, const char* message) {
-  if ((test_current_line && test_current_line >= line)
-  || param_verbose < V_NOTES
+  if ((test.current_line && test.current_line >= line)
+  || param.verbose < V_NOTES
   ) {
     return;
   }
   int level = print_headers(CONCOL_bWhite, LOGGED, NULL);
-  output_pad(param_tabsize * level, ' ');
+  output_pad(param.tabsize * level, ' ');
   output_str("line {}: ");
   output_sint(line);
   output_str(message);
@@ -1142,39 +1127,39 @@ void _cspec_log_fn(int line, const char* message) {
 }
 
 void _cspec_warn_fn(int line, const char* message) {
-  if (test_current_line && test_current_line > line) {
+  if (test.current_line && test.current_line > line) {
     return;
   }
   int level = print_headers(CONCOL_Yellow, LOGGED, NULL);
-  output_pad(param_tabsize * level, ' ');
+  output_pad(param.tabsize * level, ' ');
   output_str("line {}:%c ");
   output_sint(line);
   output_str(message);
-  if (test_warned) {
+  if (test.warned) {
     output_print_color(CONCOL_Yellow);
   } else {
     output_print_color(CONCOL_bYellow);
-    if (!test_warned) ++test_warnings_count;
+    if (!test.warned) ++test.count_warnings;
   }
-  test_warned = TRUE;
+  test.warned = TRUE;
 }
 
 static int test_error_no_fail(const char* message, csBool is_mem_err) {
   int level = print_headers(CONCOL_Red, PRINTED, NULL);
-  output_pad(param_tabsize * level, ' ');
+  output_pad(param.tabsize * level, ' ');
   if (is_mem_err) output_str("memory error: ");
   output_str(message);
   output_print();
-  if (param_padding) output_print();
+  if (param.padding) output_print();
   return level;
 }
 
 void _cspec_error_fn(const char* message) {
-  if (test_in_progress) {
-    if (!test_expect_fail) {
+  if (test.in_progress) {
+    if (!test.expect_fail) {
       test_error_no_fail(message, FALSE);
     }
-    test_failed = TRUE;
+    test.failed = TRUE;
   }
 }
 
@@ -1182,7 +1167,7 @@ void _cspec_error_fn(const char* message) {
 
 static int _cspec_error_mem(const char* message, const MemoryRecord* record) {
   int level = 0;
-  if (test_in_progress) {
+  if (test.in_progress) {
     if (!memory_expect_error) {
       level = test_error_no_fail(message, TRUE);
       if (record) {
@@ -1221,7 +1206,7 @@ static csBool resolve_param(const char* typ_N, const void* N) {
     }
   }
 
-  csBool is_size_t = cspec_strcmp(typ_N, "size_t");
+  csBool is_size_t = cspec_streq(typ_N, "size_t");
 
   if (cspec_strrstr(typ_N, "char*")
   ||  cspec_strrstr(typ_N, "byte*")
@@ -1244,8 +1229,8 @@ static csBool resolve_param(const char* typ_N, const void* N) {
     output_ptr(N);
 
   } else if
-  (  cspec_strcmp(typ_N, "char")
-  || cspec_strcmp(typ_N, "unsigned char")
+  (  cspec_streq(typ_N, "char")
+  || cspec_streq(typ_N, "unsigned char")
   ) {
     const char* tmp = output_fmt;
     output_fmt = NULL;
@@ -1256,74 +1241,74 @@ static csBool resolve_param(const char* typ_N, const void* N) {
     output_continue_format();
   }
   else if
-  (  cspec_strcmp(typ_N, "byte")
-  || cspec_strcmp(typ_N, "csByte")
+  (  cspec_streq(typ_N, "byte")
+  || cspec_streq(typ_N, "csByte")
   ) {
     output_hex(*(const char*)N);
   }
   else if
-  (  cspec_strcmp(typ_N, "short")
-  || cspec_strcmp(typ_N, "short int")
+  (  cspec_streq(typ_N, "short")
+  || cspec_streq(typ_N, "short int")
   ) {
     output_sint(*(const short int*)N);
   }
-  else if (cspec_strcmp(typ_N, "int")) {
+  else if (cspec_streq(typ_N, "int")) {
     output_sint(*(const int*)N);
   }
   else if
-  (  cspec_strcmp(typ_N, "long")
-  || cspec_strcmp(typ_N, "long int")
+  (  cspec_streq(typ_N, "long")
+  || cspec_streq(typ_N, "long int")
   || (sizeof(void*) == 4 && is_size_t)
   ) {
     output_sint(*(const long int*)N);
   }
   else if
-  (  cspec_strcmp(typ_N, "llong")
-  || cspec_strcmp(typ_N, "long long")
-  || cspec_strcmp(typ_N, "long long int")
+  (  cspec_streq(typ_N, "llong")
+  || cspec_streq(typ_N, "long long")
+  || cspec_streq(typ_N, "long long int")
   || (sizeof(void*) == 8 && is_size_t)
   ) {
     output_sint(*(const long long int*)N);
   }
   else if
-  (  cspec_strcmp(typ_N, "ushort")
-  || cspec_strcmp(typ_N, "unsigned short")
-  || cspec_strcmp(typ_N, "unsigned short int")
+  (  cspec_streq(typ_N, "ushort")
+  || cspec_streq(typ_N, "unsigned short")
+  || cspec_streq(typ_N, "unsigned short int")
   ) {
     output_uint(*(const unsigned short*)N);
   }
   else if
-  (  cspec_strcmp(typ_N, "uint")
-  || cspec_strcmp(typ_N, "csUint")
-  || cspec_strcmp(typ_N, "unsigned")
-  || cspec_strcmp(typ_N, "unsigned int")
+  (  cspec_streq(typ_N, "uint")
+  || cspec_streq(typ_N, "csUint")
+  || cspec_streq(typ_N, "unsigned")
+  || cspec_streq(typ_N, "unsigned int")
   ) {
     output_uint(*(const unsigned int*)N);
   }
   else if
-  (  cspec_strcmp(typ_N, "ulong")
-  || cspec_strcmp(typ_N, "unsigned long")
-  || cspec_strcmp(typ_N, "unsigned long int")
+  (  cspec_streq(typ_N, "ulong")
+  || cspec_streq(typ_N, "unsigned long")
+  || cspec_streq(typ_N, "unsigned long int")
   ) {
     output_uint(*(const unsigned long int*)N);
   }
   else if
-  (  cspec_strcmp(typ_N, "ullong")
-  || cspec_strcmp(typ_N, "unsigned long long")
-  || cspec_strcmp(typ_N, "unsigned long long int")
+  (  cspec_streq(typ_N, "ullong")
+  || cspec_streq(typ_N, "unsigned long long")
+  || cspec_streq(typ_N, "unsigned long long int")
   ) {
     output_uint(*(const unsigned long long int*)N);
   }
-  else if (cspec_strcmp(typ_N, "float")) {
+  else if (cspec_streq(typ_N, "float")) {
     output_float(*(const float*)N);
   }
-  else if (cspec_strcmp(typ_N, "double")) {
+  else if (cspec_streq(typ_N, "double")) {
     output_float(*(const double*)N);
   }
   else if
-  (  cspec_strcmp(typ_N, "bool")
-  || cspec_strcmp(typ_N, "_Bool")
-  || cspec_strcmp(typ_N, "csBool")
+  (  cspec_streq(typ_N, "bool")
+  || cspec_streq(typ_N, "_Bool")
+  || cspec_streq(typ_N, "csBool")
   ) {
     output_bool(*(csBool*)N);
   }
@@ -1348,16 +1333,16 @@ void _cspec_error_typed(
   const char* t_arg8, const void* arg8,
   const char* t_arg9, const void* arg9
 ) {
-  if (!test_in_progress) return;
-  test_failed = TRUE;
-  if (test_expect_fail) return;
+  if (!test.in_progress) return;
+  test.failed = TRUE;
+  if (test.expect_fail) return;
 
   int level = print_headers(CONCOL_Red, PRINTED, NULL);
   if (output_indent) {
     output_pad(output_indent, ' ');
   }
   else {
-    output_pad(param_tabsize * level, ' ');
+    output_pad(param.tabsize * level, ' ');
     output_str("line {}: ");
     output_sint(line);
     output_indent = output_index;
@@ -1380,7 +1365,7 @@ void _cspec_error_typed(
   if (t_arg8) resolve_param(t_arg8, arg8);
   if (t_arg9) resolve_param(t_arg9, arg9);
 
-  if (!param_show_types) goto finish;
+  if (!param.show_types) goto finish;
 
   /* Follows the line printing the given types for debugging, ie. : (int, int) */
   output_str(" : ( ");
@@ -1403,7 +1388,7 @@ finish:
   output_print();
 
   /* print empty line for padding */
-  if (param_padding) output_print();
+  if (param.padding) output_print();
 }
 
 /*----------------------------------------------------------------------------*\
@@ -1413,60 +1398,60 @@ finish:
 csBool _cspec_begin(int line, const char* desc) {
 
   /* A test is currently in progress, just ignore this test for now */
-  if (test_in_progress) {
+  if (test.in_progress) {
     return FALSE;
   }
 
   /* Current line is past this, we've already run this test */
-  if (test_current_line >= line) {
+  if (test.current_line >= line) {
     return FALSE;
   }
 
-  test_current_line = line;
-  test_description = desc;
-  test_desc_printed = NOT_PRINTED;
+  test.current_line = line;
+  test.description = desc;
+  test.printed_description = NOT_PRINTED;
 
   /*
   * At this point, normally we'rd run the test, but if we have a specific test
   *    number requested, we might still want to skip it.
   */
-  if ((param_line == 0 || param_line == line) && !test_skip) {
-    test_in_progress = TRUE;
+  if ((param.line == 0 || param.line == line) && !test.skip) {
+    test.in_progress = TRUE;
 
   } else {
 
-    if (param_verbose == V_VERY || test_skip) {
+    if (param.verbose == V_VERY || test.skip) {
       /* Set test in progress temporarily just so it prints the title in blue */
-      test_in_progress = TRUE;
+      test.in_progress = TRUE;
       print_headers(CONCOL_Blue, LOGGED, NULL);
     }
 
-    test_in_progress = FALSE;
+    test.in_progress = FALSE;
   }
 
-  return test_in_progress;
+  return test.in_progress;
 }
 
 csBool _cspec_end(void) {
-  if (!test_in_progress) {
+  if (!test.in_progress) {
     return FALSE;
   }
 
-  if (!test_failed && param_memory_test) {
+  if (!test.failed && !param.skip_memory_test) {
     memory_final_checks();
   }
 
-  ++test_count;
+  ++test.count;
 
-  if (!test_failed ^ test_expect_fail
+  if (!test.failed ^ test.expect_fail
 #ifdef _CSPEC_USE_MEMORY_TESTING_
   && !memory_error ^ memory_expect_error
 #endif
   ) {
-    ++test_passed_count;
+    ++test.count_passed;
 
-    if (param_verbose >= V_RUN || param_line) {
-      csBool failed = test_expect_fail;
+    if (param.verbose >= V_RUN || param.line) {
+      csBool failed = test.expect_fail;
 #ifdef _CSPEC_USE_MEMORY_TESTING_
       failed |= memory_expect_error;
 #endif
@@ -1474,8 +1459,8 @@ csBool _cspec_end(void) {
       print_headers(CONCOL_Green, LOGGED, failnote);
     }
   } else {
-    if (test_expect_fail) {
-      test_expect_fail = FALSE; /* clear this so it prints the error */
+    if (test.expect_fail) {
+      test.expect_fail = FALSE; /* clear this so it prints the error */
       _cspec_error_fn("expected to fail, but succeeded instead");
     }
 #ifdef _CSPEC_USE_MEMORY_TESTING_
@@ -1485,13 +1470,13 @@ csBool _cspec_end(void) {
 #endif
   }
 
-  test_in_progress = FALSE;
+  test.in_progress = FALSE;
 
   return TRUE;
 }
 
 csBool _cspec_active(void) {
-  return test_in_progress;
+  return test.in_progress;
 }
 
 /*----------------------------------------------------------------------------*\
@@ -1499,18 +1484,18 @@ csBool _cspec_active(void) {
 \*----------------------------------------------------------------------------*/
 
 csBool _cspec_expect_to_fail(void) {
-  if(!param_no_expect_fail)
-    test_expect_fail = TRUE;
+  if(!param.no_expect_fail)
+    test.expect_fail = TRUE;
   return TRUE;
 }
 
 #ifdef _CSPEC_USE_MEMORY_TESTING_
 static csBool memory_directive_warning(void) {
-  if (!param_memory_test) {
+  if (param.skip_memory_test) {
     _cspec_warn_fn(0xFFFFFFFF,
       "warning: expecting memory errors, but memory testing is disabled"
     );
-    test_expect_fail = TRUE;
+    test.expect_fail = TRUE;
     return TRUE;
   }
   return FALSE;
@@ -1520,9 +1505,9 @@ static csBool memory_directive_warning(void) {
 csBool _cspec_memory_expect_to_fail(void) {
 #ifdef _CSPEC_USE_MEMORY_TESTING_
   if (memory_directive_warning()) {
-    test_skip = TRUE;
-    return !test_in_progress;
-  } else if(!param_no_expect_fail)
+    test.skip = TRUE;
+    return !test.in_progress;
+  } else if(!param.no_expect_fail)
     memory_expect_error = TRUE;
   return TRUE;
 #else
@@ -1534,8 +1519,8 @@ csBool _cspec_memory_expect_to_fail(void) {
 csBool _cspec_memory_malloc_null(csBool only_once) {
 #ifdef _CSPEC_USE_MEMORY_TESTING_
   if (memory_directive_warning()) {
-    test_skip = TRUE;
-    return !test_in_progress;
+    test.skip = TRUE;
+    return !test.in_progress;
   } else
     memory_malloc_fail = only_once ? M_FAIL_ONCE : M_FAIL_ALWAYS;
   return TRUE;
@@ -1549,7 +1534,7 @@ csBool _cspec_memory_malloc_null(csBool only_once) {
 int _cspec_memory_malloc_count(void) {
 #ifdef _CSPEC_USE_MEMORY_TESTING_
   if (memory_directive_warning()) {
-    test_skip = TRUE;
+    test.skip = TRUE;
     return -1;
   }
   return memory_count_mallocs;
@@ -1562,7 +1547,7 @@ int _cspec_memory_malloc_count(void) {
 int _cspec_memory_free_count(void) {
 #ifdef _CSPEC_USE_MEMORY_TESTING_
   if (memory_directive_warning()) {
-    test_skip = TRUE;
+    test.skip = TRUE;
     return -1;
   }
   return memory_count_frees;
@@ -1577,34 +1562,34 @@ int _cspec_memory_free_count(void) {
 \*----------------------------------------------------------------------------*/
 
 void test_set_line(int line) {
-  param_line = line;
+  param.line = line;
 }
 
 static void before_run(void) {
-  test_count = 0;
-  test_passed_count = 0;
-  test_warnings_count = 0;
+  test.count = 0;
+  test.count_passed = 0;
+  test.count_warnings = 0;
 }
 
 static void before_suite(const TestSuite* suite) {
-  current_suite = suite;
-  test_filename_printed = FALSE;
+  test.suite = suite;
+  test.printed_filename = FALSE;
 }
 
 static void before_fn(const TestGroup* t) {
-  test_function_printed = FALSE;
-  test_function = t;
-  test_current_line = 0;
+  test.printed_function = FALSE;
+  test.function = t;
+  test.current_line = 0;
   assert(ctx_stack_top == 0);
 }
 
 static void before_pass(void) {
   ctx_stack_index = 0;
-  test_expect_fail = FALSE;
-  test_skip = FALSE;
-  memory_test_reset(param_memory_test);
-  test_failed = FALSE;
-  test_warned = FALSE;
+  test.expect_fail = FALSE;
+  test.skip = FALSE;
+  memory_test_reset(!param.skip_memory_test);
+  test.failed = FALSE;
+  test.warned = FALSE;
   output_indent = 0;
 }
 
@@ -1614,13 +1599,13 @@ static void process_function(const TestGroup* t) {
 
   for (;;) {
     before_pass();
-    prev_line = test_current_line;
+    prev_line = test.current_line;
 
-    test_in_function = TRUE;
+    test.in_function = TRUE;
     t->group_fn();
-    test_in_function = FALSE;
+    test.in_function = FALSE;
 
-    if (!test_in_progress && prev_line == test_current_line) break;
+    if (!test.in_progress && prev_line == test.current_line) break;
 
     _cspec_end();
   }
@@ -1631,8 +1616,8 @@ static void process_function(const TestGroup* t) {
 void cspec_run_suite(const TestSuite* suite) {
   before_suite(suite);
 
-  if (!cspec_strrstr(suite->filename, param_file)) {
-    if (param_verbose == V_VERY) {
+  if (!cspec_strrstr(suite->filename, param.file)) {
+    if (param.verbose == V_VERY) {
       output_str("skipping file: %c");
       output_str(suite->filename);
       output_print_color(CONCOL_Purple);
@@ -1642,25 +1627,25 @@ void cspec_run_suite(const TestSuite* suite) {
 
   const TestGroup* t = &(*suite->test_groups)[0];
   while (t->line) {
-    int tmp_line = param_line;
-    if (*t->line == param_line) param_line = 0;
+    int tmp_line = param.line;
+    if (*t->line == param.line) param.line = 0;
     process_function(t++);
-    param_line = tmp_line;
+    param.line = tmp_line;
   }
 
-  current_suite = NULL;
+  test.suite = NULL;
 }
 
 static csBool process_param_basic(char c) {
   csBool handled = FALSE;
   switch (c) {
-    case 'v': handled = TRUE; param_verbose = V_RUN; break;
-    case 'n': handled = TRUE; param_verbose = V_NOTES; break;
-    case 'V': handled = TRUE; param_verbose = V_VERY; break;
-    case 'f': handled = TRUE; param_no_expect_fail = TRUE; break;
-    case 'm': handled = TRUE; param_memory_test = FALSE; break;
-    case 's': handled = TRUE; param_show_types = TRUE; break;
-    case 'p': handled = TRUE; param_padding = TRUE; break;
+    case 'v': handled = TRUE; param.verbose = V_RUN; break;
+    case 'n': handled = TRUE; param.verbose = V_NOTES; break;
+    case 'V': handled = TRUE; param.verbose = V_VERY; break;
+    case 'f': handled = TRUE; param.no_expect_fail = TRUE; break;
+    case 'm': handled = TRUE; param.skip_memory_test = TRUE; break;
+    case 's': handled = TRUE; param.show_types = TRUE; break;
+    case 'p': handled = TRUE; param.padding = TRUE; break;
   }
   return handled;
 }
@@ -1680,7 +1665,7 @@ static csBool process_args(int argc, char* argv[]) {
         if (handled) continue;
       }
 
-      if (cspec_strcmp(arg, "-h") || cspec_strcmp(arg, "--help")) {
+      if (cspec_streq(arg, "-h") || cspec_streq(arg, "--help")) {
         output(
           ": Usage: tests [OPTIONS]"
           "\n:      : tests filename [OPTIONS]"
@@ -1702,27 +1687,27 @@ static csBool process_args(int argc, char* argv[]) {
         );
         return TRUE;
 
-      } else if (cspec_strcmp(arg, "--verbose")) {
+      } else if (cspec_streq(arg, "--verbose")) {
         process_param_basic('v');
 
       } else if
-      ( cspec_strcmp(arg, "--force-fails")
+      ( cspec_streq(arg, "--force-fails")
       ) {
         process_param_basic('f');
 
       } else if
-      ( cspec_strcmp(arg, "--ignore-memory")
+      ( cspec_streq(arg, "--ignore-memory")
       ) {
         process_param_basic('m');
 
       } else if
-      (  cspec_strcmp(arg, "-t")
-      || cspec_strcmp(arg, "--tab-size")
+      (  cspec_streq(arg, "-t")
+      || cspec_streq(arg, "--tab-size")
       ) {
         if (i + 1 < argc) {
-          char* param = argv[++i];
-          int as_i = cspec_atoi(param);
-          param_tabsize = as_i > 0 ? as_i : 0;
+          char* input = argv[++i];
+          int as_i = cspec_atoi(input);
+          param.tabsize = as_i > 0 ? as_i : 0;
         } else {
           output("--tab-size requires a number as an argument");
           return TRUE;
@@ -1734,7 +1719,7 @@ static csBool process_args(int argc, char* argv[]) {
       while (*s) {
         if (*s == ':') {
           *(s++) = '\0';
-          param_line = cspec_atoi(s);
+          param.line = cspec_atoi(s);
           break;
         }
         ++s;
@@ -1746,11 +1731,11 @@ static csBool process_args(int argc, char* argv[]) {
       * meticulously puts a specific test on one line of every file, who knows.
       */
       if (arg[0] != '\0') {
-        param_file = arg;
+        param.file = arg;
       }
     }
 
-    if (param_line && param_verbose == V_NONE) param_verbose = V_NOTES;
+    if (param.line && param.verbose == V_NONE) param.verbose = V_NOTES;
   }
 
   return FALSE;
@@ -1758,12 +1743,9 @@ static csBool process_args(int argc, char* argv[]) {
 
 int _cspec_run_all(int count, TestSuite* suites[], int argc, char* argv[]) {
 
-  /* This is why there needs to be an env to avoid spill for params */
-  param_verbose = V_NONE;
-  param_padding = FALSE;
-  param_no_expect_fail = FALSE;
-  param_memory_test = TRUE;
-  param_show_types = FALSE;
+  /* Reset default params */
+  param = (struct InputParams){ 2 };
+  //param.tabsize = 2;
 
   if (process_args(argc, argv)) {
     return 0;
@@ -1775,15 +1757,15 @@ int _cspec_run_all(int count, TestSuite* suites[], int argc, char* argv[]) {
     cspec_run_suite(suites[i]);
   }
 
-  if (test_count) {
-    ConsoleColor color = (test_count == test_passed_count) ? CONCOL_bGreen : CONCOL_bRed;
+  if (test.count) {
+    ConsoleColor color = (test.count == test.count_passed) ? CONCOL_bGreen : CONCOL_bRed;
     output_str("Tests passed:%c {} out of {}, or {}%");
-    output_sint(test_passed_count);
-    output_sint(test_count);
-    output_sint((int)(100.f * (float)test_passed_count / (float)test_count));
-    if (test_warnings_count) {
+    output_sint(test.count_passed);
+    output_sint(test.count);
+    output_sint((int)(100.f * (float)test.count_passed / (float)test.count));
+    if (test.count_warnings) {
       output_str(" - warnings: ");
-      output_sint(test_warnings_count);
+      output_sint(test.count_warnings);
       if (color == CONCOL_bGreen) color = CONCOL_bYellow;
     }
     output_print_color(color);
@@ -1793,5 +1775,5 @@ int _cspec_run_all(int count, TestSuite* suites[], int argc, char* argv[]) {
   }
 
   /* return the number of failed tests */
-  return test_count - test_passed_count;
+  return test.count - test.count_passed;
 }

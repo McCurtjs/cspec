@@ -743,7 +743,7 @@ extern resolve_user_types_fn resolve_user_types;
 
 void    cspec_memset(void* s, csByte c, csSize n);
 void    cspec_memcpy(void* s, const void* t, csSize n);
-csBool  cspec_strcmp(const char* A, const char* B);
+csBool  cspec_streq(const char* A, const char* B);
 csUint  cspec_strlen(const char* s);
 csBool  cspec_strrstr(const char* s, const char* ends_with);
 csBool  cspec_isdigit(char c);

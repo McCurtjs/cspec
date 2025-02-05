@@ -79,7 +79,7 @@ describe(deduction) {
   } //*/
 
   after{
-    expect(type_string to match(expected, cspec_strcmp));
+    expect(type_string to match(expected, cspec_streq));
   }
 
 #endif
@@ -339,7 +339,7 @@ describe(expect_basic) {
       }
 
       test("string compare") {
-        expect(cspec_strcmp(str, "Test string"));
+        expect(cspec_streq(str, "Test string"));
       }
 
       test("more string funcs") {
@@ -369,7 +369,7 @@ describe(expect_basic) {
       }
 
       test("string compare") {
-        expect(cspec_strcmp(str, "Something"));
+        expect(cspec_streq(str, "Something"));
       }
 
       test("more string funcs") {
@@ -628,15 +628,15 @@ describe(function_matchers) {
   context("tests succeed") {
 
     it("uses the 'match' matcher to compose a string comparison") {
-      expect(str to match("Test string", cspec_strcmp));
+      expect(str to match("Test string", cspec_streq));
     }
 
     it("uses the 'given' composition with a matcher to make the same comparison") {
-      expect(cspec_strcmp to be_true given(str, "Test string"));
+      expect(cspec_streq to be_true given(str, "Test string"));
     }
 
     it("uses the 'given' composition with an expression for the same comparison") {
-      expect(cspec_strcmp to be( == , TRUE) given(str, "Test string"));
+      expect(cspec_streq to be( == , TRUE) given(str, "Test string"));
     }
 
     it("uses the 'given' composition with one parameter") {
@@ -650,15 +650,15 @@ describe(function_matchers) {
     expect(to_fail);
 
     it("uses the 'match' matcher to compose a string comparison") {
-      expect(str to match("Test strong", cspec_strcmp));
+      expect(str to match("Test strong", cspec_streq));
     }
 
     it("uses the 'given' composition with a matcher to make the same comparison") {
-      expect(cspec_strcmp to be_true given(str, "Test strong"));
+      expect(cspec_streq to be_true given(str, "Test strong"));
     }
 
     it("uses the 'given' composition with an expression for the same comparison") {
-      expect(cspec_strcmp to be( == , TRUE) given(str, "Test strong"));
+      expect(cspec_streq to be( == , TRUE) given(str, "Test strong"));
     }
 
     it("uses the 'given' composition with one parameter") {
@@ -814,7 +814,7 @@ describe(container_matchers) {
 
       it("uses a function matcher with a function") {
         char* words[] = { "ab", "asdf", "qwerty" };
-        expect(words to all_match(arr[n], cspec_strcmp, char*, c_array));
+        expect(words to all_match(arr[n], cspec_streq, char*, c_array));
       }
 
     }
