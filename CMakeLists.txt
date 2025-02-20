@@ -14,7 +14,7 @@ target_sources(CSpec PRIVATE cspec.c cspec.h)
 target_include_directories(CSpec PUBLIC ./)
 
 if(CSPEC_MEMTEST STREQUAL ON)
-  target_compile_definitions(CSpec PUBLIC ${CSPEC_MEMTEST_DEFINES})
+  target_compile_definitions(CSpec PUBLIC ${CSPEC_MEMTEST_DEFINES} "assert=cspec_assert")
 
   if(MSVC)
     # These link warnings get thrown because of cspec_malloc and friends defined

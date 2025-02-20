@@ -306,6 +306,16 @@ describe(memory) {
 #pragma warning ( pop )
 #endif
 
+describe(assertion) {
+
+  it("Fails because of an assert") {
+    expect(to_fail);
+    expect(assertion_failure);
+    cspec_assert(FALSE);
+  }
+
+}
+
 describe(contexts) {
 
 }
@@ -1127,6 +1137,7 @@ test_suite(tests_cspec) {
   test_group(deduction),
   test_group(tests),
   test_group(memory),
+  test_group(assertion),
   test_group(contexts),
   test_group(expect_basic),
   test_group(expect_deduced_triplet),

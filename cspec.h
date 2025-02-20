@@ -342,6 +342,20 @@ typedef struct TestSuite {
 #define to_fail                   _cspec_expect_to_fail()
 
 /*
+* \brief A pre-test directive telling the system to expect an assertion to fail.
+*
+* \brief When this is used before a test, if the test would fail an assertion,
+*   it's logged as a success, but if it would otherwise complete the run, it's
+*   logged as a failure.
+*
+* \brief This feature requires assertion tracking to be enabled. See the
+*   description for cspec_assert for details.
+*
+* \param expect(assertion_failure);
+*/
+#define assertion_failure         _cspec_expect_assertion_failure()
+
+/*
 * \brief Memory errors are treated differently from regular errors; a test
 *   expecting to fail will still actually fail if it encounters memory
 *   problems. This will similarly expect memory errors to occur in the test.
@@ -705,6 +719,24 @@ typedef struct TestSuite {
 #define free_count _cspec_memory_free_count()
 
 /*----------------------------------------------------------------------------*\
+  Assertions
+\*----------------------------------------------------------------------------*/
+
+/*
+* \brief Assertion entry point for failure testing. Compile using
+*   `-Dassert=cspec_assert` or the equivalent to replace the program's usual
+*   assert/panic handling with a hook that will track critical failures.
+* 
+* \brief Note: requires libc setjmp.h in order to function.
+* 
+* \param assertion - program expected to be safe if true, expected failure
+*   if false. When this check fails, cspec will catch the error and pass or fail
+*   the test depending on the current run's expectations.
+*/
+void cspec_assert(csBool assertion);
+void _cspec_assert(csBool assertion, int line, const char* message);
+
+/*----------------------------------------------------------------------------*\
   Extras
 \*----------------------------------------------------------------------------*/
 
@@ -752,7 +784,7 @@ int     cspec_atoi(const char* s);
 /*----------------------------------------------------------------------------*\
  Implementation details, turn back now, here there be dragons.
 \*----------------------------------------------------------------------------*/
-
+/*
 #ifndef assert
 # if defined(__WASM__) && defined(__has_builtin)
 #  if __has_builtin(__builtin_trap)
@@ -763,6 +795,7 @@ int     cspec_atoi(const char* s);
 #ifndef assert
 # define assert(C)
 #endif
+*/
 
 #ifndef NULL
 # define NULL ((void*)0)
@@ -795,7 +828,6 @@ int     cspec_atoi(const char* s);
 \*----------------------------------------------------------------------------*/
 
 csBool  _cspec_begin(int line, const char* desc);
-csBool  _cspec_end(void);
 csBool  _cspec_active(void);
 csBool  _cspec_context_begin(int line, const char* desc);
 csBool  _cspec_context_end(int line);
@@ -803,6 +835,7 @@ void    _cspec_log_fn(int line, const char* messgae);
 void    _cspec_warn_fn(int line, const char* message);
 void    _cspec_error_fn(const char* message);
 csBool  _cspec_expect_to_fail(void);
+csBool  _cspec_expect_assertion_failure(void);
 csBool  _cspec_memory_expect_to_fail(void);
 csBool  _cspec_memory_malloc_null(csBool only_next);
 int     _cspec_memory_malloc_count(void);

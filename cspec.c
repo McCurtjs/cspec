@@ -22,19 +22,58 @@
 * SOFTWARE.
 */
 
+/*
+* TODO: cspec_malloc should always be available, and not depend on stdlib.
+*   This will allow users to take the cspec_alloc functions and include them in
+*   custom allocators without having to globally define malloc (which will still
+*   be an option).
+*/
 #ifdef malloc
 # define _CSPEC_USE_MEMORY_TESTING_
 # undef malloc
 # undef realloc
 # undef calloc
 # undef free
+#endif
 
+#ifdef assert
+# define _CSPEC_USE_ASSERT_HANDLING_
+#endif
+
+#ifdef _CSPEC_USE_MEMORY_TESTING_
 /* to import real malloc / free / etc. */
 # include <stdlib.h>
 #endif
 
+/*
+* Check if cspec_assert has been defined at the command line. If it has, enable
+*   assertion handling with longjmp.
+*/
+#ifdef _CSPEC_USE_ASSERT_HANDLING_
+# include <setjmp.h>
+# undef assert
+# include <assert.h>
+# define real_assert(X) assert(X)
+#elif defined(__GNUC__) && defined(__has_builtin)
+# if __has_builtin(__builtin_trap)
+#  define real_assert(CONDITION) (!(CONDITION) ? __builtin_trap() : 0)
+# endif
+#elif defined(_MSC_VER)
+# define real_assert(X) (!(X) ? __debugbreak() : 0)
+#else
+# define real_assert(X)
+#endif
+
+/*
+* Include the main CSpec header
+*/
 #include "cspec.h"
 
+/*
+* Create default modes of output - this should be replaced with a generic
+*   format function that can be expected by the user and defined either at
+*   compile time or passed in as an argument from main.
+*/
 #ifdef __WASM__
 # define CONCOL(Color, CON, HEX) MACRO_CONCAT(CONCOL_, Color) = HEX
 extern void js_log(const char* str, unsigned int len, ConsoleColor color);
@@ -75,6 +114,13 @@ typedef enum Verbosity {
   V_VERY    /* -va prints everything, even headers of tests that aren't run */
 } Verbosity;
 
+typedef enum Status {
+  S_NOMINAL,
+  S_WARNING,
+  S_FAILURE,
+  S_ASSERTS
+} Status;
+
 static struct InputParams {
   int tabsize;              /* -t [n] */
   const char* file;         /* filename */
@@ -93,16 +139,21 @@ static struct TestContext {
   PrintLevel printed_description;
   csBool printed_filename;
   csBool printed_function;
+  csBool critical;
   csBool failed;
   csBool warned;
   csBool in_function;
   csBool in_progress;
   csBool expect_fail;
+  csBool expect_assert;
   csBool skip;
   int current_line;
   int count;
   int count_passed;
   int count_warnings;
+#ifdef _CSPEC_USE_ASSERT_HANDLING_
+  jmp_buf jump_buffer;
+#endif
 } test = { 0 };
 
 /*----------------------------------------------------------------------------*\
@@ -872,6 +923,38 @@ void _memory_print_block(const void* ptr, int rows) { (void)ptr; (void)rows; }
 #endif
 
 /*----------------------------------------------------------------------------*\
+  Assertion Handling
+\*----------------------------------------------------------------------------*/
+
+void cspec_assert(csBool assertion) {
+  _cspec_assert(assertion, 0, "Assertion failed during test");
+}
+
+void _cspec_assert(csBool assertion, int line, const char* message) {
+
+  real_assert(test.in_progress);
+
+#ifdef _CSPEC_USE_ASSERT_HANDLING_
+
+  if (assertion == TRUE) return;
+
+  test.critical = TRUE;
+
+  if (test.expect_assert) {
+    longjmp(test.jump_buffer, 1);
+  } else {
+    test.expect_fail = FALSE;
+    _cspec_error_fn(message);
+    longjmp(test.jump_buffer, 1);
+  }
+
+#else
+  _cspec_error_fn("Assertion was thrown, but handling is disabled.");
+#endif
+
+}
+
+/*----------------------------------------------------------------------------*\
   Test Context
 \*----------------------------------------------------------------------------*\
 * A test context allows pre-test setup to be shared between multiple tests.
@@ -960,7 +1043,7 @@ csBool _cspec_context_begin(int line, const char* desc) {
   * Any other context on the stack should still be open (and thus already
   * passed by the stack ptr), or have already closed out and be gone.
   */
-  assert(ctx_stack_index == ctx_stack_top);
+  real_assert(ctx_stack_index == ctx_stack_top);
 
   /*
   * If this context's line was specified in the input params, run all the
@@ -1043,7 +1126,7 @@ csBool _cspec_context_end(int line) {
   }
 
   /* Make sure we're not trying to pop the stack root */
-  assert(ctx_stack_top != 0);
+  real_assert(ctx_stack_top != 0);
 
   /* Pop the context from the stack */
   ctx_stack_index = --ctx_stack_top;
@@ -1437,6 +1520,10 @@ csBool _cspec_end(void) {
     return FALSE;
   }
 
+  if (test.expect_assert && !test.critical) {
+    test.failed = TRUE;
+  }
+
   if (!test.failed && !param.skip_memory_test) {
     memory_final_checks();
   }
@@ -1446,6 +1533,9 @@ csBool _cspec_end(void) {
   if (!test.failed ^ test.expect_fail
 #ifdef _CSPEC_USE_MEMORY_TESTING_
   && !memory_error ^ memory_expect_error
+#endif
+#ifdef _CSPEC_USE_ASSERT_HANDLING_
+  && !test.critical ^ test.expect_assert
 #endif
   ) {
     ++test.count_passed;
@@ -1459,9 +1549,13 @@ csBool _cspec_end(void) {
       print_headers(CONCOL_Green, LOGGED, failnote);
     }
   } else {
-    if (test.expect_fail) {
+    if (test.expect_fail && !test.failed) {
       test.expect_fail = FALSE; /* clear this so it prints the error */
       _cspec_error_fn("expected to fail, but succeeded instead");
+    }
+    if (test.expect_assert && !test.critical) {
+      test.expect_fail = FALSE;
+      _cspec_error_fn("expected an assert failure, but received none");
     }
 #ifdef _CSPEC_USE_MEMORY_TESTING_
     if (memory_expect_error) {
@@ -1501,6 +1595,16 @@ static csBool memory_directive_warning(void) {
   return FALSE;
 }
 #endif
+
+csBool _cspec_expect_assertion_failure(void) {
+#ifdef _CSPEC_USE_ASSERT_HANDLING_
+  test.expect_assert = TRUE;
+  return TRUE;
+#else
+  _cspec_error_fn("Expected assertion failure, but handling is disabled");
+  return FALSE;
+#endif
+}
 
 csBool _cspec_memory_expect_to_fail(void) {
 #ifdef _CSPEC_USE_MEMORY_TESTING_
@@ -1580,16 +1684,18 @@ static void before_fn(const TestGroup* t) {
   test.printed_function = FALSE;
   test.function = t;
   test.current_line = 0;
-  assert(ctx_stack_top == 0);
+  real_assert(ctx_stack_top == 0);
 }
 
 static void before_pass(void) {
   ctx_stack_index = 0;
   test.expect_fail = FALSE;
+  test.expect_assert = FALSE;
   test.skip = FALSE;
   memory_test_reset(!param.skip_memory_test);
   test.failed = FALSE;
   test.warned = FALSE;
+  test.critical = FALSE;
   output_indent = 0;
 }
 
@@ -1602,6 +1708,9 @@ static void process_function(const TestGroup* t) {
     prev_line = test.current_line;
 
     test.in_function = TRUE;
+#ifdef _CSPEC_USE_ASSERT_HANDLING_
+    if (setjmp(test.jump_buffer) == 0)
+#endif
     t->group_fn();
     test.in_function = FALSE;
 
