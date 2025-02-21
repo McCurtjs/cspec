@@ -147,7 +147,10 @@ typedef struct TestSuite {
 #define it(DESC)                  _test("it "DESC)
 #define test(DESC)                _test(DESC)
 
-// \brief
+/*
+* \brief An `after` block is run after each test. The code in this block will
+*     only run if a test/it block was actually processed.
+*/
 #define after                     _after
 
 /*----------------------------------------------------------------------------*\
@@ -668,9 +671,9 @@ typedef struct TestSuite {
 * \param arr - The container to iterate over, in this case, a C-style array
 *   delcared with the form `type arr[n]`.
 */
-#define c_array_foreach_index(iter, i, arr)                               \
-  iter = NULL;                                                            \
-  for (csUint i = 0; i < ARRAY_COUNT(arr) ? (iter = (void*)&arr[i]), 1 : 0; ++i) //
+#define c_array_foreach_index(iter, i, arr)                                   \
+  iter = NULL;                                                                \
+  for (csUint i = 0; i < ARRAY_COUNT(arr) ? (iter = (void*)&arr[i]), 1 : 0; ++i)
 #endif
 
 #ifndef c_array_ptr_foreach_index
@@ -692,12 +695,12 @@ typedef struct TestSuite {
 * \param arr - A pointer to a C-style array whose quantity of elements is
 *   denoted in a variable named `<arr>_size`.
 */
-#define c_array_ptr_foreach_index(iter, i, arr)               \
-  iter = NULL;                                                \
-  for (csUint i = 0;                                          \
-      i < MACRO_CONCAT(arr, _size) ? (iter = &arr[i]), 1 : 0; \
-      ++i                                                     \
-  )                                                           //
+#define c_array_ptr_foreach_index(iter, i, arr)                               \
+  iter = NULL;                                                                \
+  for (csUint i = 0;                                                          \
+      i < MACRO_CONCAT(arr, _size) ? (iter = &arr[i]), 1 : 0;                 \
+      ++i                                                                     \
+  )
 #endif
 
 /*----------------------------------------------------------------------------*\
@@ -827,6 +830,7 @@ int     cspec_atoi(const char* s);
   Internal functions
 \*----------------------------------------------------------------------------*/
 
+void    cspec_print(const char* message);
 csBool  _cspec_begin(int line, const char* desc);
 csBool  _cspec_active(void);
 csBool  _cspec_context_begin(int line, const char* desc);
@@ -867,8 +871,10 @@ void    _cspec_error_typed(int line, const char* pfix, const char* fmt,
 #  define CSPEC_CUSTOM_TYPES
 # endif
 # ifdef _MSC_VER
-// MSVC has an issue that sometimes causes _Generic to throw a warning that a
-//    variable was initialized but not used. Disable that here.
+/*
+* MSVC has an issue that sometimes causes _Generic to throw a warning that a
+*   variable was initialized but not used. Disable that here.
+*/
 #  pragma warning ( disable : 4189 )
 # endif
 # define _type_s_lit(X, T) _Generic((&X), T**: #T"*", default: #T"[]" )
@@ -879,7 +885,7 @@ void    _cspec_error_typed(int line, const char* pfix, const char* fmt,
   _type_s_h(X, char),  _type_s_h(X, short), _type_s_h(X, int),    _type_s_h(X, long),   _type_s_h(X, long long),      \
   _type_s_h(X, unsigned char), _type_s_h(X, unsigned short),      _type_s_h(X, unsigned int),                         \
   _type_s_h(X, unsigned long), _type_s_h(X, unsigned long long),  _type_s_h(X, float),  _type_s_h(X, double)          \
-)                                                                                                                     //
+)
 // Adding a 'default' field can allow custom types to be used in an "expect fn to be_something given(custom1, custom2)" format
 //    but then it won't be obvious that the type is not supported, and the output will not be useful
 /*/
@@ -894,7 +900,7 @@ void    _cspec_error_typed(int line, const char* pfix, const char* fmt,
   unsigned char:  "unsigned char",  unsigned char*:     "unsigned char*",     \
   unsigned int:   "unsigned int",   unsigned int*:      "unsigned int*",      \
   unsigned long:  "unsigned long",  unsigned long long: "unsigned long long"  \
-)                                                                             //
+)
 # else
 #  define _type_s(X) "_type"#X
 # endif
@@ -925,6 +931,14 @@ void    _cspec_error_typed(int line, const char* pfix, const char* fmt,
 # define _test_fail_fn_expr(F, x, B, P) { _test_fail_args("expected X "#x" "#B" where X == "#F#P, "%n\nreceived {} "#x" {}" _param_fn_str P, _type_s(_R), (void*)&_R, _type_s(_B), (void*)&_B, _param_fn_arg P 0); return; }
 # define _test_fail_fn_comp(S, P) { _test_fail_args("expected "S, "%n\nreceived {}" _param_fn_str P, _type_s(_R), (void*)&_R, _param_fn_arg P 0); return; }
 # define _test_fail_fn_true(F, A, B) { _test_fail_args("expected to pass "#F"("#A", "#B")", "%n\nparam 1: {}\nparam 2: {}", _type_s(_A), (void*)&_A, _type_s(_B), (void*)&_B); return; }
+
+/* This should be reduced to just "auto" once MSVC supports it */
+# if __STDC_VERSION__ < 202311 || defined(_MSC_VER)
+#  define AUTO_T(VAR, RHS) typeof(RHS) VAR = RHS
+# else
+/* check support for gcc and clang */
+#  define AUTO_T(VAR, RHS) auto VAR = RHS
+# endif
 
 #endif
 
@@ -958,15 +972,15 @@ void    _cspec_error_typed(int line, const char* pfix, const char* fmt,
     return;                                                                                                                                             \
   } }                                                                                                                                                   //
 
-#define _expect_fn_expr(S, F, x, B, P, ...)         typeof(F P) _R = (F P);   typeof(B) _B = (B);       _param_fn_def P if (!(_R x _B))   _test_fail_fn_expr(F, x, B, P)
-#define _expect_fn_comp(S, F, M, P, ...)            typeof(F P) _R = (F P);   csBool    _test = M(_R);  _param_fn_def P if (!_test)       _test_fail_fn_comp(S, P)
-#define _expect_fn_true(S, A, F, B, ...)            typeof(A)   _A = A;       typeof(B) _B = B;                         if (!(F(_A, _B))) _test_fail_fn_true(F, A, B)
-#define _expect_comp_all(S, A, E, B, x, T, F, ...)                            csBool    _test = F(A, B, E, x);          if (!_test)       _test_fail_all(S, T)
-#define _expect_type2(S, A, x, B, T, t, ...)        T           _A=(A);       t         _B=(B);                         if (!(_A x _B))   _test_fail_t(A, x, B, #T, #t)
-#define _expect_type1(S, A, x, B, T, ...)           T           _A=(A);       T         _B=(B);                         if (!(_A x _B))   _test_fail_t(A, x, B, #T, #T)
-#define _expect_expr(S, A, x, B, ...)               typeof(A)   _A=(A);       typeof(B) _B=(B);                         if (!(_A x _B))   _test_fail_t(A, x, B, _type_s(_A), _type_s(_B))
-#define _expect_comp(S, A, F, ...)                  typeof(A)   _Aout = (A);  csBool    _test = F(_Aout);               if (!_test)       _test_fail_comp(S)
-#define _expect_true(S, A, ...)                                                                                         if (!(A))         _test_fail("line "STR(__LINE__)": expected "S)
+#define _expect_fn_expr(S, F, x, B, P, ...)         AUTO_T(_R, (F P));    AUTO_T(_B, (B));         _param_fn_def P  if (!(_R x _B))   _test_fail_fn_expr(F, x, B, P)
+#define _expect_fn_comp(S, F, M, P, ...)            AUTO_T(_R, (F P));    csBool    _test = M(_R); _param_fn_def P  if (!_test)       _test_fail_fn_comp(S, P)
+#define _expect_fn_true(S, A, F, B, ...)            AUTO_T(_A, A);        AUTO_T(_B, B);                            if (!(F(_A, _B))) _test_fail_fn_true(F, A, B)
+#define _expect_comp_all(S, A, E, B, x, T, F, ...)                        csBool    _test = F(A, B, E, x);          if (!_test)       _test_fail_all(S, T)
+#define _expect_type2(S, A, x, B, T, t, ...)        T           _A=(A);   t         _B=(B);                         if (!(_A x _B))   _test_fail_t(A, x, B, #T, #t)
+#define _expect_type1(S, A, x, B, T, ...)           T           _A=(A);   T         _B=(B);                         if (!(_A x _B))   _test_fail_t(A, x, B, #T, #T)
+#define _expect_expr(S, A, x, B, ...)               AUTO_T(_A, (A));      AUTO_T(_B, (B));                          if (!(_A x _B))   _test_fail_t(A, x, B, _type_s(_A), _type_s(_B))
+#define _expect_comp(S, A, F, ...)                  AUTO_T(_Aout, (A));   csBool    _test = F(_Aout);               if (!_test)       _test_fail_comp(S)
+#define _expect_true(S, A, ...)                                                                                     if (!(A))         _test_fail("line "STR(__LINE__)": expected "S)
 #define _expect_va(S, U, V, W, X, Y, Z,_0,_1,_2, F, ...) do { _expect##F(S, U, V, W, X, Y, Z); } while(0)
 #define _expect(S, ...) _expect_va(S, __VA_ARGS__, _fn_expr, _fn_comp, _fn_true, _comp_all, _type2, _type1, _expr, _comp, _true)
 
@@ -1025,8 +1039,10 @@ void    _cspec_error_typed(int line, const char* pfix, const char* fmt,
 # undef _eval_comp
 # undef to_pass
 
-// \brief `to_pass` and `match` don't work in C11 without typeof, but at least
-//    to_pass can functionally operate even though it can't print variables.
+/*
+* \brief `to_pass` and `match` don't work in C11 without typeof, but at least
+*   to_pass can functionally operate even though it can't print variables.
+*/
 # define to_pass(fn, A, C) fn(A, C)
 
 # undef _be_between

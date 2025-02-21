@@ -82,6 +82,8 @@ extern void js_log(const char* str, unsigned int len, ConsoleColor color);
 extern int puts(const char* s);
 #endif
 
+#define DEFAULT_TABSIZE 2
+
 typedef enum ConsoleColor {
   CONCOL(Black,   30, 0x0000000),
   CONCOL(Red,     31, 0x0ff0000),
@@ -130,7 +132,7 @@ static struct InputParams {
   csBool no_expect_fail;    /* -f */
   csBool skip_memory_test;  /* -m */
   csBool show_types;        /* -s */
-} param = { 2 };
+} param = { .tabsize = DEFAULT_TABSIZE };
 
 static struct TestContext {
   const TestSuite* suite;
@@ -693,7 +695,7 @@ static void memory_final_checks(void) {
   /* Ensure malloc was called if it was asked to fail */
   if (memory_malloc_fail >= M_WAS_EXPECTED && !memory_malloc_forced_failures) {
     char err[] = "memory error: after: malloc fail requested, but never called";
-    /* 
+    /*
     * causes regular error rather than memory error, since this is a failure
     * within the test design rather than memory actually breaking (ie, using
     * `expect(memory_error)` will not succeed if you forget to call malloc)
@@ -1134,7 +1136,7 @@ csBool _cspec_context_end(int line) {
   return TRUE;
 }
 
-/* Called between each test group, after all passes on a function are completed */
+/* Called between each test group when all passes on a function are completed */
 static void context_clear_stack(void) {
   ctx_stack_top = 0;
   ctx_stack_index = 0;
@@ -1193,6 +1195,11 @@ static int print_headers(
   }
 
   return level + 1;
+}
+
+void cspec_print(const char* message) {
+  output_str("{}\n");
+  output_str(message);
 }
 
 void _cspec_log_fn(int line, const char* message) {
@@ -1341,7 +1348,7 @@ static csBool resolve_param(const char* typ_N, const void* N) {
   else if
   (  cspec_streq(typ_N, "long")
   || cspec_streq(typ_N, "long int")
-  || (sizeof(void*) == 4 && is_size_t)
+  || (is_size_t && sizeof(void*) == 4)
   ) {
     output_sint(*(const long int*)N);
   }
@@ -1349,7 +1356,7 @@ static csBool resolve_param(const char* typ_N, const void* N) {
   (  cspec_streq(typ_N, "llong")
   || cspec_streq(typ_N, "long long")
   || cspec_streq(typ_N, "long long int")
-  || (sizeof(void*) == 8 && is_size_t)
+  || (is_size_t && sizeof(void*) == 8)
   ) {
     output_sint(*(const long long int*)N);
   }
@@ -1853,7 +1860,7 @@ static csBool process_args(int argc, char* argv[]) {
 int _cspec_run_all(int count, TestSuite* suites[], int argc, char* argv[]) {
 
   /* Reset default params */
-  param = (struct InputParams){ 2 };
+  param = (struct InputParams){ .tabsize = DEFAULT_TABSIZE };
   //param.tabsize = 2;
 
   if (process_args(argc, argv)) {

@@ -1,6 +1,7 @@
 #!/bin/bash
 
 build_target="wasm"
+build_vers=""
 unit_test=false
 build_type="Debug"
 skip_cmake=false
@@ -9,14 +10,11 @@ read_args=true
 
 while [ "$read_args" == true ] && [ "$1" != "" ]; do
   case "$1" in
-    -t | --target)
-      build_target="$2"
-      shift 1
-      ;;
     -h | --help)
-      echo ": - -- Options"
+      echo ": - --       Options"
       echo ": h help                                 : prints this message"
-      echo ": t target  [wasm|gcc|clang|mingw|msvc]  : sets build target"
+      echo ": t target   [wasm|gcc|clang|mingw|msvc] : sets build target"
+      echo ": c standard [all|23|11|99]              : set C standard version"
       echo ": r release                              : release build (default is debug)"
       echo ": s skip-cmake                           : skips cmake"
       echo ": -- <args>                              : passes remaining args to built exe (if any)"
@@ -25,6 +23,18 @@ while [ "$read_args" == true ] && [ "$1" != "" ]; do
     -- )
       args="$@"
       read_args=false
+      ;;
+    -t | --target)
+      build_target="$2"
+      shift 1
+      ;;
+    -c | --standard)
+      if [ "$2" == "all" ]; then
+        build_vers="23 11 99"
+      else
+        build_vers+="$2 "
+      fi
+      shift 1
       ;;
     -r | --release)
       build_type="Release"
@@ -39,6 +49,8 @@ while [ "$read_args" == true ] && [ "$1" != "" ]; do
   esac
   shift 1
 done
+
+if [ "$build_vers" == "" ]; then build_vers="23"; fi
 
 # Get make executable
 make_exe="no_make"
@@ -110,7 +122,7 @@ if [ "$build_target" = "wasm" ] || [ "$build_target" = "clang" ]; then
   # Native
   elif [ "$build_target" = "clang" ]; then
 
-    flags_clang=" \
+    flags_clang=" -std=c2x\
       -Dmalloc=cspec_malloc -Drealloc=cspec_realloc \
       -Dcalloc=cspec_calloc -Dfree=cspec_free \
     ";
@@ -129,10 +141,51 @@ elif [ "$build_target" = "gcc" ]; then
 
   mkdir -p build/gcc
 
-  gcc -o build/gcc/test.exe cspec.c tst/cspec_spec.c tst/test_main.c -I ./
+  gcc_params="cspec.c tst/cspec_spec.c tst/test_main.c -I ./"
+  success="0"
 
-  if [ "$?" == "0" ]; then
-    ./build/gcc/test.exe $args
+  if [[ "$build_vers" =~ "23" ]]; then
+    gcc -std=c2x -o build/gcc/test.exe $gcc_params
+    success="$?"
+    if [ "$success" == "0" ]; then
+      echo "C23"
+      ./build/gcc/test.exe $args
+      success="$?"
+    fi
+  fi
+
+  if [[ "$success" == "0" && "$build_vers" =~ "11" ]]; then
+    gcc -std=c11 -o build/gcc/test11.exe $gcc_params
+    success="$?"
+    if [ "$success" == "0" ]; then
+      echo "C11"
+      ./build/gcc/test11.exe $args
+      success="$?"
+    fi
+  fi
+
+
+  exit
+
+  #if [ "$success" ]; then echo "blah"; fi
+
+  #if [ "$success" == "0" ] && ./build/gcc/test.exe $args && success="$?";
+  #[ "$success" == "0" ] && echo "Hello!";
+  #[ "$success" == "0" ] && success=`gcc -std=c11 -o build/gcc/test_11.exe $gcc_params`
+  #[ "$success" == "0" ] && success=`./build/gcc/test_11.exe $args`
+
+
+
+#  if [ "$?" == "0" ]; then
+#    ./build/gcc/test.exe $args
+#
+#    if [ "$?" == "0" ]; then
+#      gcc -std=c11 -o build/gcc/test_c11.exe cspec.c tst/cspec_spec.c tst/test_main.c -I ./
+#
+#      if [ "$?" == "0" ]; then
+#        ./build/gcc/test.exe $args
+#      fi
+#    fi
   fi
 
 # CMake MinGW on Windows with GCC

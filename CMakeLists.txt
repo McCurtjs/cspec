@@ -39,7 +39,7 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
     set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT ${PROJECT_NAME}_specs)
   else()
     target_compile_options(${PROJECT_NAME}_specs PRIVATE
-      -Wall -Wextra -Wpedantic -Werror
+      -std=c2x -Wall -Wextra -Wpedantic -Werror
     )
   endif()
 endif()
