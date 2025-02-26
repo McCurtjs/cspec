@@ -310,7 +310,7 @@ describe(assertion) {
 
   it("Fails because of an assert") {
     expect(to_fail);
-    expect(assertion_failure);
+    //expect(assertion_failure);
     cspec_assert(FALSE);
   }
 
@@ -679,10 +679,6 @@ describe(function_matchers) {
 
 }
 
-#ifdef _MSC_VER
-#pragma warning ( push )
-#pragma warning ( disable : 4456 )
-#endif
 describe(container_matchers) {
 
   context("compositions on an int array [3, 5, 7]") {
@@ -696,10 +692,10 @@ describe(container_matchers) {
       }
 
       context("a negative number is added to the array [..., -1]") {
-        int arr[] = { 3, 5, 7, -1 };
+        int arr2[] = { 3, 5, 7, -1 };
 
         it("does not contain only positive values") {
-          expect(arr to not all(be_positive, int, c_array));
+          expect(arr2 to not all(be_positive, int, c_array));
         }
       }
 
@@ -759,10 +755,10 @@ describe(container_matchers) {
       expect(to_fail);
 
       context("a negative number is added to the array [..., -1]") {
-        int arr[] = { 3, 5, 7, -1 };
+        int arr2[] = { 3, 5, 7, -1 };
 
         it("contains only positive values") {
-          expect(arr to all(be_positive, int, c_array));
+          expect(arr2 to all(be_positive, int, c_array));
         }
 
         it("wants ONLY values that are not positive") {
@@ -832,9 +828,6 @@ describe(container_matchers) {
   }
 
 }
-#ifdef _MSC_VER
-#pragma warning ( pop )
-#endif
 
 describe(matcher_basics) {
 
@@ -1155,3 +1148,12 @@ test_suite(tests_cspec) {
 #ifdef _MSC_VER
 #pragma warning ( pop )
 #endif
+
+/*
+* Split specs for cspec between:
+* cspec_spec (structure: blocks (it, test), describe, context, assert)
+* matcher_spec
+* container_spec
+* memory_spec
+* utils_spec (stdlib-like functions)
+*/

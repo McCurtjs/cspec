@@ -78,8 +78,8 @@
 *       }
 */
 
-#ifndef _CSPEC_H_
-#define _CSPEC_H_
+#ifndef CSPEC_H
+#define CSPEC_H
 
 typedef _Bool csBool;
 typedef unsigned int csUint;
@@ -356,7 +356,7 @@ typedef struct TestSuite {
 *
 * \param expect(assertion_failure);
 */
-#define assertion_failure         _cspec_expect_assertion_failure()
+#define assertion_failure         _cspec_expect_assertion_failure() // to_assert?
 
 /*
 * \brief Memory errors are treated differently from regular errors; a test
@@ -389,6 +389,16 @@ typedef struct TestSuite {
 * \param expect(null_mallocs)
 */
 #define null_mallocs              _cspec_memory_malloc_null(FALSE)
+
+/*
+* \brief Force realloc to always move memory for the remainder of the test, even
+*   if there is space to resize.
+*
+* \param expect(moving_realloc)
+*/
+#define moving_realloc
+
+//void cspec_realloc_always_moves(csBool enable);
 
 /*----------------------------------------------------------------------------*\
   Matchers
@@ -467,10 +477,19 @@ typedef struct TestSuite {
 #define be_false(A)               ((A) == FALSE)
 
 /*
+* \brief Checks that a given value is "truthy". A truthy value is any integer
+*   value other than 0 (ie, any value that passes `if(value)`).
+*
+* \param - `expect(value to be_truthy);`
+* \param - `expect(fn to be_truthy given(args));`
+*/
+#define be_truthy(A)              ((A) != 0)
+
+/*
 * \brief Not strictly a matcher, but syntax for readability around basic
 *   expressions in some situations.
 *
-* \brief Example: `expect(subject to be( > , 7))`
+* \brief Example: `expect(subject to be( > , 7));`
 * \brief Example: `expect(function to be( == , 12) given(args));`
 *
 * \param x - The operator for the expression
@@ -559,10 +578,10 @@ typedef struct TestSuite {
 * \param - `expect(value to be_about(5.0f));` - expects the value to be
 *   approximately 5.0f.
 */
-#define be_about(N)               _be_within(about_epsilon, N, inclusive, float)
+#define be_about(N)               _be_within(cspec_epsilon, N, inclusive, float)
 
-#ifndef about_epsilon
-# define about_epsilon 0.0001f
+#ifndef cspec_epsilon
+# define cspec_epsilon 0.0001f
 #endif
 
 /*
@@ -721,6 +740,11 @@ typedef struct TestSuite {
 */
 #define free_count _cspec_memory_free_count()
 
+void* cspec_malloc(csSize size);
+void  cspec_free(void* mem);
+void* cspec_calloc(csSize ct, csSize sel);
+void* cspec_realloc(void* mem, csSize nsize);
+
 /*----------------------------------------------------------------------------*\
   Assertions
 \*----------------------------------------------------------------------------*/
@@ -729,15 +753,14 @@ typedef struct TestSuite {
 * \brief Assertion entry point for failure testing. Compile using
 *   `-Dassert=cspec_assert` or the equivalent to replace the program's usual
 *   assert/panic handling with a hook that will track critical failures.
-* 
+*
 * \brief Note: requires libc setjmp.h in order to function.
-* 
+*
 * \param assertion - program expected to be safe if true, expected failure
 *   if false. When this check fails, cspec will catch the error and pass or fail
 *   the test depending on the current run's expectations.
 */
 void cspec_assert(csBool assertion);
-void _cspec_assert(csBool assertion, int line, const char* message);
 
 /*----------------------------------------------------------------------------*\
   Extras
@@ -745,6 +768,8 @@ void _cspec_assert(csBool assertion, int line, const char* message);
 
 typedef csUint (*resolve_user_types_fn)
   (const char** p_type, const void* value, char* out_buffer, csUint out_size);
+
+typedef void (*print_backtrace_fn)(void);
 
 /*
 * \brief A function pointer that is initially null, but can be set by a user to
@@ -770,6 +795,17 @@ typedef csUint (*resolve_user_types_fn)
 *   determine how to write the contents of N.
 */
 extern resolve_user_types_fn resolve_user_types;
+
+/*
+* \brief A function pointer that is initially null, but can be set by a user to
+*   describe how to print a backtrace.
+*/
+extern print_backtrace_fn cspec_opt_print_backtrace;
+
+/*
+* \brief Default backtrace function
+*/
+void cspec_default_print_backtrace(void);
 
 /*
 * A few internal functions that can be used if convenient in an environment

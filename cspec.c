@@ -60,7 +60,9 @@
 # endif
 #elif defined(_MSC_VER)
 # define real_assert(X) (!(X) ? __debugbreak() : 0)
-#else
+#endif
+
+#ifndef real_assert
 # define real_assert(X)
 #endif
 
@@ -81,6 +83,9 @@ extern void js_log(const char* str, unsigned int len, ConsoleColor color);
 # define CONCOL(Color, CON, HEX) MACRO_CONCAT(CONCOL_, Color) = CON
 extern int puts(const char* s);
 #endif
+
+resolve_user_types_fn resolve_user_types = NULL;
+print_backtrace_fn cspec_opt_print_backtrace = NULL;
 
 #define DEFAULT_TABSIZE 2
 
@@ -164,11 +169,13 @@ static struct TestContext {
 
 void cspec_memset(void* s_, csByte c, csSize n) {
   csByte* s = s_;
+  if (!s) return;
   while (n--) *(s++) = c;
 }
 
 void cspec_memcpy(void* s_, const void* t_, csSize n) {
   csByte* s = s_; const csByte* t = t_;
+  if (!(s && t)) return;
   while (n--) *(s++) = *(t++);
 }
 
@@ -183,6 +190,7 @@ csBool cspec_streq(const char* A, const char* B) {
 
 csUint cspec_strlen(const char* s) {
   csUint ret = 0;
+  if (!s) return 0;
   while (*(s++)) ++ret;
   return ret;
 }
@@ -501,7 +509,7 @@ typedef enum MallocFailLevel {
 /* #define memory_size_max 4096 // defined in header for customizability */
 
 typedef struct MemoryRecord {
-  size_t size;
+  csSize size;
   csByte* block;
   csBool is_free;
 } MemoryRecord;
@@ -510,18 +518,19 @@ static int _cspec_error_mem(const char* message, const MemoryRecord* record);
 
 static csByte _memory[memory_size_full];
 static csByte* memory = _memory + memory_size_barrier;
-static size_t memory_ptr;
+static csSize memory_ptr;
 
 /* Not using dynamic array here because, of course, it uses malloc! */
 static MemoryRecord* memory_records = NULL;
-static size_t memory_records_capacity;
-static size_t memory_records_size;
+static csSize memory_records_capacity;
+static csSize memory_records_size;
 static int memory_count_mallocs = 0;
 static int memory_count_frees = 0;
 static csBool memory_expect_error = FALSE;
 static csBool memory_error = FALSE;
 static MallocFailLevel memory_malloc_fail = M_NORMAL;
 static int memory_malloc_forced_failures = 0;
+static int memory_realloc_force_move = FALSE;
 #define memory_records_grow_factor 1.5f
 
 static void memory_print_row(const csByte* row, int level, csBool target) {
@@ -552,7 +561,7 @@ static void memory_print_row(const csByte* row, int level, csBool target) {
 }
 
 static void memory_print_record(const MemoryRecord* record, int level) {
-  size_t i = 0;
+  csSize i = 0;
   while (i < record->size + memory_size_fence + 16) {
     memory_print_row(record->block + i - 16 + memory_size_fence, level, i == 16);
     i += 16;
@@ -561,7 +570,7 @@ static void memory_print_record(const MemoryRecord* record, int level) {
 }
 
 static csBool memory_check_fence(MemoryRecord* record) {
-  for (size_t i = 0; i < memory_size_fence; ++i) {
+  for (csSize i = 0; i < memory_size_fence; ++i) {
     if ('b' != *(record->block + i)
     ||  'e' != *(record->block + i + memory_size_fence + record->size)
     ) {
@@ -646,7 +655,7 @@ static void memory_test_reset(csBool enable) {
 
 static void memory_final_checks(void) {
   /* Validate all memory records */
-  for (size_t i = 0; i < memory_records_size; ++i) {
+  for (csSize i = 0; i < memory_records_size; ++i) {
     MemoryRecord* record = &memory_records[i];
 
     /* Ensure all fences are in - tact */
@@ -657,7 +666,7 @@ static void memory_final_checks(void) {
     /* Ensure memory hasn't been modified after free */
     if (record->is_free) {
       csByte* block = record->block + memory_size_fence;
-      for (size_t j = 0; j < record->size; ++j) {
+      for (csSize j = 0; j < record->size; ++j) {
         if (block[j] != 'F') {
           _cspec_error_mem("after: memory modified after free", record);
         }
@@ -670,7 +679,7 @@ static void memory_final_checks(void) {
   }
 
   /* Check barrier fences */
-  for (size_t i = 0; i < memory_size_barrier; ++i) {
+  for (csSize i = 0; i < memory_size_barrier; ++i) {
     if (0xFF != _memory[i]
     ||  0xFF != _memory[i + memory_size_barrier + memory_size_max]
     ) {
@@ -704,7 +713,7 @@ static void memory_final_checks(void) {
   }
 }
 
-void* cspec_malloc(size_t size) {
+void* cspec_malloc(csSize size) {
   if (!memory_records || !test.in_function) {
     /* ++memory_count_mallocs; */
     void* ret = malloc(size);
@@ -729,7 +738,7 @@ void* cspec_malloc(size_t size) {
     return NULL;
   }
 
-  size_t next = memory_ptr + memory_size_fence*2 + size;
+  csSize next = memory_ptr + memory_size_fence*2 + size;
 
   if (next >= memory_size_max - memory_size_fence*2) {
     memory_expect_error = FALSE;
@@ -744,7 +753,7 @@ void* cspec_malloc(size_t size) {
   ++memory_count_mallocs;
 
   if (memory_records_size >= memory_records_capacity) {
-    size_t new_cap = (size_t)(
+    csSize new_cap = (csSize)(
       (float)memory_records_capacity * memory_records_grow_factor
     );
     MemoryRecord* new_mem_rec = realloc(
@@ -762,7 +771,7 @@ void* cspec_malloc(size_t size) {
   MemoryRecord* record = &memory_records[memory_records_size++];
 
   if (memory_ptr != 0) {
-    size_t fence = memory_ptr - memory_size_fence;
+    csSize fence = memory_ptr - memory_size_fence;
     for (; fence < memory_ptr; ++fence) {
       if (memory[fence] != 'e') {
         _cspec_error_mem("malloc: preceeding fence broken", record - 1);
@@ -836,7 +845,7 @@ void cspec_free(void* mem_) {
   ++memory_count_frees;
 }
 
-void* cspec_calloc(size_t ct, size_t sel) {
+void* cspec_calloc(csSize ct, csSize sel) {
   if (!memory_records || !test.in_function) {
     return calloc(ct, sel);
   }
@@ -848,7 +857,7 @@ void* cspec_calloc(size_t ct, size_t sel) {
   return ret;
 }
 
-void* cspec_realloc(void* mem, size_t nsize) {
+void* cspec_realloc(void* mem, csSize nsize) {
   if (!memory_records || !test.in_function) {
     /* if (mem == NULL) ++memory_count_mallocs; */
     return realloc(mem, nsize);
@@ -929,29 +938,25 @@ void _memory_print_block(const void* ptr, int rows) { (void)ptr; (void)rows; }
 \*----------------------------------------------------------------------------*/
 
 void cspec_assert(csBool assertion) {
-  _cspec_assert(assertion, 0, "Assertion failed during test");
-}
-
-void _cspec_assert(csBool assertion, int line, const char* message) {
 
   real_assert(test.in_progress);
+  if (assertion) return;
+  test.critical = TRUE;
 
 #ifdef _CSPEC_USE_ASSERT_HANDLING_
-
-  if (assertion == TRUE) return;
-
-  test.critical = TRUE;
 
   if (test.expect_assert) {
     longjmp(test.jump_buffer, 1);
   } else {
     test.expect_fail = FALSE;
-    _cspec_error_fn(message);
+    _cspec_error_fn("Assertion failed during test");
+    if (cspec_opt_print_backtrace) cspec_opt_print_backtrace();
     longjmp(test.jump_buffer, 1);
   }
 
 #else
   _cspec_error_fn("Assertion was thrown, but handling is disabled.");
+  test.expect_fail = FALSE;
 #endif
 
 }
@@ -1272,10 +1277,8 @@ static int _cspec_error_mem(const char* message, const MemoryRecord* record) {
 #endif
 
 /*----------------------------------------------------------------------------*\
-  Printing fo typed values
+  Printing of typed values
 \*----------------------------------------------------------------------------*/
-
-resolve_user_types_fn resolve_user_types = NULL;
 
 static csBool resolve_param(const char* typ_N, const void* N) {
 
@@ -1296,7 +1299,8 @@ static csBool resolve_param(const char* typ_N, const void* N) {
     }
   }
 
-  csBool is_size_t = cspec_streq(typ_N, "size_t");
+  csBool is_size_t = cspec_streq(typ_N, "size_t")
+                  || cspec_streq(typ_N, "csSize");
 
   if (cspec_strrstr(typ_N, "char*")
   ||  cspec_strrstr(typ_N, "byte*")
@@ -1706,7 +1710,7 @@ static void before_pass(void) {
   output_indent = 0;
 }
 
-static void process_function(const TestGroup* t) {
+static void _cspec_run_function(const TestGroup* t) {
   before_fn(t);
   int prev_line;
 
@@ -1729,7 +1733,7 @@ static void process_function(const TestGroup* t) {
   context_clear_stack();
 }
 
-void cspec_run_suite(const TestSuite* suite) {
+void _cspec_run_suite(const TestSuite* suite) {
   before_suite(suite);
 
   if (!cspec_strrstr(suite->filename, param.file)) {
@@ -1745,7 +1749,7 @@ void cspec_run_suite(const TestSuite* suite) {
   while (t->line) {
     int tmp_line = param.line;
     if (*t->line == param.line) param.line = 0;
-    process_function(t++);
+    _cspec_run_function(t++);
     param.line = tmp_line;
   }
 
@@ -1870,7 +1874,7 @@ int _cspec_run_all(int count, TestSuite* suites[], int argc, char* argv[]) {
   before_run();
 
   for (int i = 0; i < count; ++i) {
-    cspec_run_suite(suites[i]);
+    _cspec_run_suite(suites[i]);
   }
 
   if (test.count) {
@@ -1892,4 +1896,43 @@ int _cspec_run_all(int count, TestSuite* suites[], int argc, char* argv[]) {
 
   /* return the number of failed tests */
   return test.count - test.count_passed;
+}
+
+/*----------------------------------------------------------------------------*\
+  Default backtracing features
+\*----------------------------------------------------------------------------*/
+
+#ifdef _MSC_VER
+#define WIN32_LEAN_AND_MEAN
+#include<Windows.h>
+#include<DbgHelp.h>
+#endif
+
+#define FRAMES 5
+
+__declspec(noinline) void cspec_default_print_backtrace(void) {
+
+#ifdef _MSC_VER
+  // Make it work with built-in cspec logging
+  //test_log("blah!!!!!!!\n");
+
+  void* traces[FRAMES];
+  CaptureStackBackTrace(2, FRAMES, traces, NULL);
+
+  HANDLE process = GetCurrentProcess();
+  SymInitialize(process, NULL, TRUE);
+
+  csByte blob[sizeof(SYMBOL_INFO) + 256];
+  cspec_memset(blob, 0, sizeof(SYMBOL_INFO) + 256);
+
+  SYMBOL_INFO* info = (SYMBOL_INFO*)blob;
+  info->MaxNameLen = 255;
+  info->SizeOfStruct = sizeof(SYMBOL_INFO);
+
+  for (int i = 0; i < FRAMES; ++i) {
+    SymFromAddr(process, (DWORD64)traces[i], 0, info);
+    puts(info->Name);
+  }
+#endif
+
 }

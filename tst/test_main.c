@@ -24,11 +24,16 @@
 
 #include "cspec.h"
 
+void backtracer(void);
+
 // Test suites
 
 extern TestSuite tests_cspec;
 
 // Main
+
+#include <stdio.h>
+
 
 #ifdef __WASM__
 void __attribute((export_name("set_line"))) test_set_line(int line);
@@ -44,6 +49,12 @@ int main(int argc, char* argv[]) {
   TestSuite* test_suites[] = {
     &tests_cspec
   };
+
+  cspec_opt_print_backtrace = cspec_default_print_backtrace;
+
+  printf("C VERSION " STR(__STDC_VERSION__) "\n");
+
+  printf("End\n");
 
   return cspec_run_all(test_suites);
 }
