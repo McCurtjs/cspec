@@ -113,6 +113,19 @@ typedef struct TestSuite {
 *    the actual available space you can allocate will be lower.
 */
 #define memory_size_max 4096
+#define cspec_max_memory_pool_size 4096
+#endif
+
+#ifndef cspec_max_memory_allocs
+#define cspec_max_memory_allocs 32
+#endif
+
+#ifndef cspec_max_line_length
+#define cspec_max_line_length 511
+#endif
+
+#ifndef cspec_max_context_depth
+#define cspec_max_context_depth 10
 #endif
 
 /*----------------------------------------------------------------------------*\
@@ -821,7 +834,7 @@ csBool  cspec_isdigit(char c);
 int     cspec_atoi(const char* s);
 
 /*----------------------------------------------------------------------------*\
- Implementation details, turn back now, here there be dragons.
+  Implementation details, turn back now, here there be dragons.
 \*----------------------------------------------------------------------------*/
 /*
 #ifndef assert

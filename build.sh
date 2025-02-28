@@ -186,7 +186,7 @@ elif [ "$build_target" = "gcc" ]; then
 #        ./build/gcc/test.exe $args
 #      fi
 #    fi
-  fi
+#  fi
 
 # CMake MinGW on Windows with GCC
 elif [ "$build_target" = "mingw" ]; then

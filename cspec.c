@@ -235,7 +235,7 @@ int cspec_atoi(const char* s) {
 * works on WASM varianets with no libc, all our string handling for output
 * should be done in a static space to avoid the need for malloc/free.
 */
-#define output_size 500
+#define output_size 511
 #define output_float_precision 10
 static char output_buffer[output_size + 1];
 static csUint output_index = 0;
@@ -943,20 +943,16 @@ void cspec_assert(csBool assertion) {
   if (assertion) return;
   test.critical = TRUE;
 
-#ifdef _CSPEC_USE_ASSERT_HANDLING_
-
-  if (test.expect_assert) {
-    longjmp(test.jump_buffer, 1);
-  } else {
+  if (!test.expect_assert) {
     test.expect_fail = FALSE;
     _cspec_error_fn("Assertion failed during test");
     if (cspec_opt_print_backtrace) cspec_opt_print_backtrace();
-    longjmp(test.jump_buffer, 1);
   }
 
+#ifdef _CSPEC_USE_ASSERT_HANDLING_
+  longjmp(test.jump_buffer, 1);
 #else
-  _cspec_error_fn("Assertion was thrown, but handling is disabled.");
-  test.expect_fail = FALSE;
+  test_warn("Assertion was thrown, but handling is disabled.");
 #endif
 
 }
@@ -1542,11 +1538,9 @@ csBool _cspec_end(void) {
   ++test.count;
 
   if (!test.failed ^ test.expect_fail
+  &&  !test.critical ^ test.expect_assert
 #ifdef _CSPEC_USE_MEMORY_TESTING_
-  && !memory_error ^ memory_expect_error
-#endif
-#ifdef _CSPEC_USE_ASSERT_HANDLING_
-  && !test.critical ^ test.expect_assert
+  &&  !memory_error ^ memory_expect_error
 #endif
   ) {
     ++test.count_passed;
@@ -1608,13 +1602,11 @@ static csBool memory_directive_warning(void) {
 #endif
 
 csBool _cspec_expect_assertion_failure(void) {
-#ifdef _CSPEC_USE_ASSERT_HANDLING_
   test.expect_assert = TRUE;
-  return TRUE;
-#else
-  _cspec_error_fn("Expected assertion failure, but handling is disabled");
-  return FALSE;
+#ifndef _CSPEC_USE_ASSERT_HANDLING_
+  test_warn("Expected assertion failure, but handling is disabled");
 #endif
+  return TRUE;
 }
 
 csBool _cspec_memory_expect_to_fail(void) {
@@ -1931,7 +1923,7 @@ __declspec(noinline) void cspec_default_print_backtrace(void) {
 
   for (int i = 0; i < FRAMES; ++i) {
     SymFromAddr(process, (DWORD64)traces[i], 0, info);
-    puts(info->Name);
+    cspec_print(info->Name);
   }
 #endif
 

@@ -248,7 +248,7 @@ describe(memory) {
 #if defined(malloc) || !defined(_MSC_VER)
     it("causes a buffer overrun") {
       char* buffer = malloc(5);
-      assert(buffer);
+      cspec_assert(buffer);
       for (int i = 0; i <= 5; ++i) {
         buffer[i] = '!';
       }
@@ -308,9 +308,10 @@ describe(memory) {
 
 describe(assertion) {
 
-  it("Fails because of an assert") {
-    expect(to_fail);
-    //expect(assertion_failure);
+  it("fails because of an assert") {
+    //expect(to_fail);
+    expect(assertion_failure);
+    //test_log("Testing?");
     cspec_assert(FALSE);
   }
 
