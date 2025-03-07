@@ -139,7 +139,33 @@ static struct InputParams {
   csBool show_types;        /* -s */
 } param = { .tabsize = DEFAULT_TABSIZE };
 
-static struct TestContext {
+#define cspec_output_size 512
+
+struct OutputEnv {
+  char buffer[cspec_max_output_size + 1];
+  csUint index;
+  csUint indent; // probably not needed (use ctx.level instead?)
+  const char* fmt;
+  int fmt_lock;
+};
+
+typedef struct TestContext {
+  const char* desc;
+  csBool printed;
+  csBool requested_context;
+} Context;
+
+struct TestPass {
+  csUint indent_level;
+  csBool expect_fail;
+  csBool expect_assert;
+  csBool skip;
+  csBool failed;
+  csBool warned;
+  csBool critical;
+};
+
+static struct TestEnv {
   const TestSuite* suite;
   const TestGroup* function;
   const char* description;
@@ -158,6 +184,9 @@ static struct TestContext {
   int count;
   int count_passed;
   int count_warnings;
+  struct OutputEnv out;
+  struct TestContext ctx;
+  struct TestPass pass;
 #ifdef _CSPEC_USE_ASSERT_HANDLING_
   jmp_buf jump_buffer;
 #endif
@@ -237,7 +266,138 @@ int cspec_atoi(const char* s) {
 */
 #define output_size 511
 #define output_float_precision 10
-static char output_buffer[output_size + 1];
+
+
+static void _cspec_out_ch(char ch) {
+  if (test.out.index < cspec_max_output_size) {
+    test.out.buffer[test.out.index++] = ch;
+  }
+}
+
+static void _cspec_out_str(const char* s, csUint length) {
+  while (*s && test.out.index < cspec_max_output_size) {
+
+    switch (*s) {
+
+      case '\n': {
+        _cspec_out_ch('\n');
+        for (csUint i = 0; i < test.out.indent; ++i) {
+          _cspec_out_ch(' ');
+        }
+      } break;
+
+      case '%': {
+        if (s[1] == 'n') {
+          if (param.padding) {
+            _cspec_out_ch('\n');
+          }
+          ++s;
+        }
+#ifndef __WASM__
+        else if (s[1] == 'c') {
+          char color_indicator[] = "\033[_;3_m";
+          if (test.out.index + sizeof(color_indicator) < cspec_max_output_size) {
+            _cspec_out_str(color_indicator, sizeof(color_indicator) - 1);
+            s += 2;
+          }
+        }
+#endif
+        else {
+          _cspec_out_ch(*s);
+        }
+      } break;
+
+      default: {
+        //test.out.buffer[test.out.index++] = *s;
+        _cspec_out_ch(*s);
+      } break;
+    }
+
+
+
+  }
+}
+
+static void _cspec_out_fmt_continue(void) {
+  if (!test.out.fmt || test.out.fmt_lock) return;
+  const char* fmt = test.out.fmt;
+
+  /* get length from start to next {} or \0 */
+  csUint i;
+  const char* next_fmt = NULL;
+  for (i = 0; *fmt; ++i) {
+    if (fmt[i] == '{' && fmt[i + 1] == '}') {
+      if (fmt[i + 2]) next_fmt = &fmt[i + 2];
+      break;
+    }
+  }
+
+  _cspec_out_str(fmt, i);
+  test.out.fmt = next_fmt;
+}
+
+void cspec_out_ch(char ch) {
+  _cspec_out_ch(ch);
+  _cspec_out_fmt_continue();
+}
+
+void cspec_out_str(const char* s) {
+  if (!s) return;
+  csUint length = cspec_strlen(s);
+  _cspec_out_str(s, length);
+  _cspec_out_fmt_continue();
+}
+
+void cspec_out_fmt(const char* fmt) {
+  if (!fmt) return;
+  test.out.fmt = fmt;
+  test.out.fmt_lock = FALSE;
+  _cspec_out_fmt_continue();
+}
+
+
+
+
+#if 0
+void cspec_print(ConsoleColor color) {
+  /* flush any remaining format string */
+  if (output_fmt) output_str(output_fmt);
+
+#ifndef __WASM__
+  /* find the color specifier if it was added into the string */
+  for (csUint i = 0; i < output_index; ++i) {
+    if (output_buffer[i] == '\033') {
+      /* set boldness flag */
+      output_buffer[i + 2] = color >= 40 ? '1' : '0';
+
+      /* fill out the color code being requested */
+      output_buffer[i + 5] = '0' + color % 10;
+
+      /* cap the string with a closing color specifier */
+      output_str("\033[0m");
+
+      break;
+    }
+  }
+#endif
+
+  // finally print the string
+#ifdef __WASM__
+  js_log(output_buffer, output_index, color);
+#else
+  puts(output_buffer);
+#endif
+
+  output_reset();
+}
+#endif
+
+
+
+
+
+
+char output_buffer[output_size + 1];
 static csUint output_index = 0;
 static csUint output_indent = 0;
 static const char* output_fmt = NULL;
@@ -974,11 +1134,6 @@ void cspec_assert(csBool assertion) {
 * test group (between multiple calls of the group function), and is used to
 * keep track of
 */
-typedef struct Context {
-  const char* desc;
-  csBool printed;
-  csBool requested_context;
-} Context;
 
 #ifndef cspec_ctx_stack_size_max
 # define cspec_ctx_stack_size_max 20
@@ -1679,11 +1834,12 @@ static void before_run(void) {
 }
 
 static void before_suite(const TestSuite* suite) {
+  cspec_memset(&test, 0, sizeof(test));
   test.suite = suite;
   test.printed_filename = FALSE;
 }
 
-static void before_fn(const TestGroup* t) {
+static void before_group(const TestGroup* t) {
   test.printed_function = FALSE;
   test.function = t;
   test.current_line = 0;
@@ -1702,8 +1858,8 @@ static void before_pass(void) {
   output_indent = 0;
 }
 
-static void _cspec_run_function(const TestGroup* t) {
-  before_fn(t);
+static void _cspec_run_group(const TestGroup* t) {
+  before_group(t);
   int prev_line;
 
   for (;;) {
@@ -1741,7 +1897,7 @@ void _cspec_run_suite(const TestSuite* suite) {
   while (t->line) {
     int tmp_line = param.line;
     if (*t->line == param.line) param.line = 0;
-    _cspec_run_function(t++);
+    _cspec_run_group(t++);
     param.line = tmp_line;
   }
 
@@ -1855,9 +2011,10 @@ static csBool process_args(int argc, char* argv[]) {
 
 int _cspec_run_all(int count, TestSuite* suites[], int argc, char* argv[]) {
 
-  /* Reset default params */
-  param = (struct InputParams){ .tabsize = DEFAULT_TABSIZE };
-  //param.tabsize = 2;
+  /* Reset default params, context, and env*/
+  cspec_memset(&test, 0, sizeof(test));
+  cspec_memset(&param, 0, sizeof(param));
+  param.tabsize = DEFAULT_TABSIZE;
 
   if (process_args(argc, argv)) {
     return 0;
@@ -1926,5 +2083,7 @@ __declspec(noinline) void cspec_default_print_backtrace(void) {
     cspec_print(info->Name);
   }
 #endif
+
+  // Todo: why is clang pretending to be Microsoft too?
 
 }

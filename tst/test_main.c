@@ -44,8 +44,9 @@ int __attribute__((export_name("spec_main"))) spec_main(int argc, int line) {
 #else
 int main(int argc, char* argv[]) {
 #endif
-  //argv = (char*[]){ "BLAH", "-v", ":309" };
-  //argc = 3;
+  argv = (char*[]){ "BLAH", "-vf", ":309" };
+  argc = 2;
+
   TestSuite* test_suites[] = {
     &tests_cspec
   };

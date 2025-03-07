@@ -128,6 +128,10 @@ typedef struct TestSuite {
 #define cspec_max_context_depth 10
 #endif
 
+#ifndef cspec_max_output_size
+#define cspec_max_output_size 511
+#endif
+
 /*----------------------------------------------------------------------------*\
   Test setup
 \*----------------------------------------------------------------------------*/
