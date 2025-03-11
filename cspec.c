@@ -137,7 +137,7 @@ static struct InputParams {
   csBool no_expect_fail;    /* -f */
   csBool skip_memory_test;  /* -m */
   csBool show_types;        /* -s */
-} param = { .tabsize = DEFAULT_TABSIZE };
+} param;
 
 #define cspec_output_size 512
 
@@ -147,6 +147,7 @@ struct OutputEnv {
   csUint indent; // probably not needed (use ctx.level instead?)
   const char* fmt;
   int fmt_lock;
+  ConsoleColor color;
 };
 
 typedef struct TestContext {
@@ -190,7 +191,7 @@ static struct TestEnv {
 #ifdef _CSPEC_USE_ASSERT_HANDLING_
   jmp_buf jump_buffer;
 #endif
-} test = { 0 };
+} test;
 
 /*----------------------------------------------------------------------------*\
   Useful functions when we don't have a standrad library to rely on
@@ -206,6 +207,22 @@ void cspec_memcpy(void* s_, const void* t_, csSize n) {
   csByte* s = s_; const csByte* t = t_;
   if (!(s && t)) return;
   while (n--) *(s++) = *(t++);
+}
+
+void cspec_strcpy(char* dst, const char* src) {
+  csUint length = cspec_strlen(src);
+  cspec_memcpy(dst, src, length + 1);
+}
+
+void cspec_memrev(void* start_, void* end_) {
+  char* start = start_;
+  char* end = end_;
+  if (!start || !end || start >= end) return;
+  while (start < end) {
+    char temp = *start;
+    *start++ = *end;
+    *--end = temp;
+  }
 }
 
 csBool cspec_streq(const char* A, const char* B) {
@@ -275,12 +292,16 @@ static void _cspec_out_ch(char ch) {
 }
 
 static void _cspec_out_str(const char* s, csUint length) {
-  while (*s && test.out.index < cspec_max_output_size) {
+  if (test.out.index + length >= cspec_max_output_size) {
+    length = cspec_max_output_size - test.out.index;
+  }
+
+  for (csUint i = 0; *s && i < length; ++i) {
 
     switch (*s) {
 
       case '\n': {
-        _cspec_out_ch('\n');
+        _cspec_out_ch(*s++);
         for (csUint i = 0; i < test.out.indent; ++i) {
           _cspec_out_ch(' ');
         }
@@ -291,29 +312,28 @@ static void _cspec_out_str(const char* s, csUint length) {
           if (param.padding) {
             _cspec_out_ch('\n');
           }
-          ++s;
+          s += 2;
         }
 #ifndef __WASM__
         else if (s[1] == 'c') {
           char color_indicator[] = "\033[_;3_m";
           if (test.out.index + sizeof(color_indicator) < cspec_max_output_size) {
             _cspec_out_str(color_indicator, sizeof(color_indicator) - 1);
-            s += 2;
           }
+          s += 2;
         }
 #endif
         else {
-          _cspec_out_ch(*s);
+          _cspec_out_ch(*s++);
         }
       } break;
 
       default: {
         //test.out.buffer[test.out.index++] = *s;
-        _cspec_out_ch(*s);
+        _cspec_out_ch(*s++);
       } break;
+
     }
-
-
 
   }
 }
@@ -336,8 +356,32 @@ static void _cspec_out_fmt_continue(void) {
   test.out.fmt = next_fmt;
 }
 
-void cspec_out_ch(char ch) {
-  _cspec_out_ch(ch);
+const char* cspec_out_read(void) {
+  test.out.buffer[test.out.index] = '\0';
+  return test.out.buffer;
+}
+
+void cspec_out_fmt_begin(void) {
+  ++test.out.fmt_lock;
+}
+
+void cspec_out_fmt_end(void) {
+  if (test.out.fmt_lock <= 0) return;
+  if (--test.out.fmt_lock == 0) {
+    _cspec_out_fmt_continue();
+  }
+}
+
+void cspec_out_clear(void) {
+  test.out.index = 0;
+  test.out.fmt = NULL;
+  test.out.fmt_lock = 0;
+}
+
+void cspec_out_fmt(const char* fmt) {
+  if (!fmt) return;
+  test.out.fmt = fmt;
+  test.out.fmt_lock = FALSE;
   _cspec_out_fmt_continue();
 }
 
@@ -348,12 +392,102 @@ void cspec_out_str(const char* s) {
   _cspec_out_fmt_continue();
 }
 
-void cspec_out_fmt(const char* fmt) {
-  if (!fmt) return;
-  test.out.fmt = fmt;
-  test.out.fmt_lock = FALSE;
+void cspec_out_ch(char ch) {
+  _cspec_out_ch(ch);
   _cspec_out_fmt_continue();
 }
+
+void cspec_out_hex(char c) {
+  unsigned char h = ((unsigned char)c) % 16;
+  h += h >= 10 ? 'A'-10 : '0';
+  _cspec_out_ch(h);
+  h = ((unsigned char)c) / 16;
+  h += h >= 10 ? 'A'-10 : '0';
+  _cspec_out_ch(h);
+  _cspec_out_fmt_continue();
+}
+
+void cspec_out_pad(csUint until_pos, char c) {
+  real_assert(until_pos < cspec_max_output_size);
+  while (test.out.index < until_pos) {
+    _cspec_out_ch(c);
+  }
+  _cspec_out_fmt_continue();
+}
+
+void cspec_out_bool(csBool b) {
+  cspec_out_str(b ? "true" : "false");
+  /* out_str calls fmt_continue */
+}
+
+void cspec_out_uint(unsigned long long int i) {
+  if (i == 0) {
+    _cspec_out_ch('0');
+    return;
+  }
+  csUint start = test.out.index;
+  while (i) {
+    _cspec_out_ch('0' + i % 10);
+  }
+  cspec_memrev(test.out.buffer + start, test.out.buffer + test.out.index);
+  _cspec_out_fmt_continue();
+}
+
+void cspec_out_int(long long int i) {
+  if (i < 0) {
+    _cspec_out_ch('-');
+    i *= -1;
+  }
+  cspec_out_uint(i);
+  /* out_uint calls fmt_continue */
+}
+
+void cspec_out_ptr(const void* ptr) {
+  long long unsigned int p = (long long unsigned int)ptr;
+  _cspec_out_ch('0');
+  _cspec_out_ch('x');
+  for (int i = 10; i --> 2;) {
+    char c = p % 16;
+    c += c >= 10 ? 'A'-10 : '0';
+    _cspec_out_ch(c);
+    p /= 16;
+  }
+  _cspec_out_fmt_continue();
+}
+
+static void _cspec_out_float(double f, int precision) {
+  if (f < 0.0) {
+    _cspec_out_ch('-');
+    f *= -1.0;
+  }
+  unsigned long long int integer_part = (unsigned long long int)f;
+  cspec_out_fmt_begin();
+  cspec_out_uint((unsigned long long int)f);
+  _cspec_out_ch('.');
+  f -= integer_part;
+  f *= precision;
+  cspec_out_uint((unsigned long long int)f);
+  while (test.out.buffer[--test.out.index] == '0') {
+    if (test.out.buffer[test.out.index] == '.') {
+      ++test.out.index;
+      break;
+    }
+  }
+  cspec_out_fmt_end();
+  /* out_fmt_end calls fmt_continue */
+}
+
+void cspec_out_float(double f) {
+  _cspec_out_float(f, output_float_precision);
+  _cspec_out_fmt_continue();
+}
+
+void cspec_out_print(void) {
+
+}
+
+
+
 
 
 
@@ -690,7 +824,7 @@ static csBool memory_expect_error = FALSE;
 static csBool memory_error = FALSE;
 static MallocFailLevel memory_malloc_fail = M_NORMAL;
 static int memory_malloc_forced_failures = 0;
-static int memory_realloc_force_move = FALSE;
+//static int memory_realloc_force_move = FALSE;
 #define memory_records_grow_factor 1.5f
 
 static void memory_print_row(const csByte* row, int level, csBool target) {
@@ -1834,7 +1968,6 @@ static void before_run(void) {
 }
 
 static void before_suite(const TestSuite* suite) {
-  cspec_memset(&test, 0, sizeof(test));
   test.suite = suite;
   test.printed_filename = FALSE;
 }

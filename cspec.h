@@ -373,7 +373,8 @@ typedef struct TestSuite {
 *
 * \param expect(assertion_failure);
 */
-#define assertion_failure         _cspec_expect_assertion_failure() // to_assert?
+#define assertion_failure         _cspec_expect_assertion_failure()
+#define to_assert                 _cspec_expect_assertion_failure()
 
 /*
 * \brief Memory errors are treated differently from regular errors; a test
@@ -396,6 +397,7 @@ typedef struct TestSuite {
 * \param expect(null_malloc)
 */
 #define null_malloc               _cspec_memory_malloc_null(TRUE)
+#define malloc_failure            _cspec_memory_malloc_null(TRUE)
 
 /*
 * \brief Force all remaining attempts to allocate memory for this test to fail.
@@ -406,6 +408,7 @@ typedef struct TestSuite {
 * \param expect(null_mallocs)
 */
 #define null_mallocs              _cspec_memory_malloc_null(FALSE)
+#define malloc_failures           _cspec_memory_malloc_null(FALSE)
 
 /*
 * \brief Force realloc to always move memory for the remainder of the test, even
@@ -414,6 +417,7 @@ typedef struct TestSuite {
 * \param expect(moving_realloc)
 */
 #define moving_realloc
+#define realloc_to_always_move
 
 //void cspec_realloc_always_moves(csBool enable);
 
@@ -501,6 +505,23 @@ typedef struct TestSuite {
 * \param - `expect(fn to be_truthy given(args));`
 */
 #define be_truthy(A)              ((A) != 0)
+
+/*
+* \brief Checks that a given value is NULL.
+* 
+* \param - `expect(ptr to be_null);`
+* \param - `expect(ptr to not be_null);`
+* \param - `expect(cspec_malloc to not be_null given(sizeof(int)));`
+*/
+#define be_null(A)                ((A) == NULL)
+
+/*
+* \brief Checks if a given value is 0.
+* 
+* \param `expect(an_integer to be_zero);`
+* \param `expect(fn to not be_zero given(params));`
+*/
+#define be_zero(A)                ((A) == 0)
 
 /*
 * \brief Not strictly a matcher, but syntax for readability around basic
@@ -681,6 +702,10 @@ typedef struct TestSuite {
 */
 #define all_be(op, value, T_elem, T_cont) _all_be(op, value, T_elem, T_cont)
 
+/*----------------------------------------------------------------------------*\
+  Enumerators
+\*----------------------------------------------------------------------------*/
+
 #ifndef c_array_foreach_index
 /*
 * \brief A macro to provide an indexed foreach that can be used to iterate over
@@ -829,13 +854,34 @@ void cspec_default_print_backtrace(void);
 *   that doesn't have access to the standard library.
 */
 
-void    cspec_memset(void* s, csByte c, csSize n);
-void    cspec_memcpy(void* s, const void* t, csSize n);
+void    cspec_memset(void* dst, csByte c, csSize n);
+void    cspec_memcpy(void* dst, const void* src, csSize n);
+void    cspec_strcpy(char* dst, const char* src);
+void    cspec_memrev(void* start_, void* end_);
 csBool  cspec_streq(const char* A, const char* B);
 csUint  cspec_strlen(const char* s);
 csBool  cspec_strrstr(const char* s, const char* ends_with);
 csBool  cspec_isdigit(char c);
 int     cspec_atoi(const char* s);
+
+/*
+* \brief CSpec output functions
+*/
+const char* cspec_out_read(void);
+void cspec_out_fmt_begin(void);
+void cspec_out_fmt_end(void);
+void cspec_out_clear(void);
+void cspec_out_fmt(const char* fmt);
+void cspec_out_str(const char* s);
+void cspec_out_ch(char ch);
+void cspec_out_int(long long int);
+void cspec_out_uint(unsigned long long int i);
+void cspec_out_hex(char c);
+void cspec_out_ptr(const void* ptr);
+void cspec_out_bool(csBool b);
+void cspec_out_pad(csUint until_pos, char c);
+void cspec_out_float(double f);
+void cspec_out_print(void);
 
 /*----------------------------------------------------------------------------*\
   Implementation details, turn back now, here there be dragons.
@@ -972,7 +1018,7 @@ void    _cspec_error_typed(int line, const char* pfix, const char* fmt,
 # define _csva_exp(F, G, ...) _csva_exp_va(F,G,__VA_ARGS__,9,8,7,6,5,4,3,2,1)
 
 # define _param_mty(N, P, ...)
-# define _param_def(N, P, ...) typeof(P) MACRO_CONCAT(_P, N) = P;
+# define _param_def(N, P, ...) typeof(_Generic((P), typeof(P): (P), default: (void*)0)) MACRO_CONCAT(_P, N) = (P);
 # define _param_arg(N, P, ...) _type_s(P), (void*)&MACRO_CONCAT(_P, N),
 # define _param_str(N, P, ...) "\nparam "#N": {}"
 

@@ -32,10 +32,12 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
   target_sources(${PROJECT_NAME}_specs PRIVATE
   ./tst/test_main.c
   ./tst/cspec_spec.c
+  ./tst/libcs_spec.c
   )
 
   if (MSVC)
     target_compile_options(${PROJECT_NAME}_specs PRIVATE /W4 /WX /std:clatest)
+    target_link_libraries(${PROJECT_NAME}_specs PRIVATE DbgHelp)
     set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT ${PROJECT_NAME}_specs)
   else()
     target_compile_options(${PROJECT_NAME}_specs PRIVATE

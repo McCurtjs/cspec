@@ -24,10 +24,9 @@
 
 #include "cspec.h"
 
-void backtracer(void);
-
 // Test suites
 
+extern TestSuite tests_libcs;
 extern TestSuite tests_cspec;
 
 // Main
@@ -44,10 +43,11 @@ int __attribute__((export_name("spec_main"))) spec_main(int argc, int line) {
 #else
 int main(int argc, char* argv[]) {
 #endif
-  argv = (char*[]){ "BLAH", "-vf", ":309" };
-  argc = 2;
+  argv = (char*[]){ "BLAH", "-vf", "libcs_spec.c" };
+  argc = 3;
 
   TestSuite* test_suites[] = {
+    &tests_libcs,
     &tests_cspec
   };
 

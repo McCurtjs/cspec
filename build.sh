@@ -89,13 +89,20 @@ case "$build_target" in
     ;;
 esac
 
+
+sources_test="
+  cspec.c
+  tst/libcs_spec.c
+  tst/cspec_spec.c
+  tst/test_main.c
+"
+
 # Run build based on target type
 
 # Clang build targets
 if [ "$build_target" = "wasm" ] || [ "$build_target" = "clang" ]; then
 
   flags_common="-Wall -Wextra -Wno-missing-braces -I ./"
-  sources_test="cspec.c tst/cspec_spec.c tst/test_main.c"
 
   flags_debug_opt="-g -O0"
   if [ "$build_type" = "Release" ]; then
@@ -141,11 +148,11 @@ elif [ "$build_target" = "gcc" ]; then
 
   mkdir -p build/gcc
 
-  gcc_params="cspec.c tst/cspec_spec.c tst/test_main.c -I ./"
+  gcc_params="-I ./"
   success="0"
 
   if [[ "$build_vers" =~ "23" ]]; then
-    gcc -std=c2x -o build/gcc/test.exe $gcc_params
+    gcc -std=c2x -o build/gcc/test.exe $sources_test $gcc_params
     success="$?"
     if [ "$success" == "0" ]; then
       echo "C23"
@@ -155,7 +162,7 @@ elif [ "$build_target" = "gcc" ]; then
   fi
 
   if [[ "$success" == "0" && "$build_vers" =~ "11" ]]; then
-    gcc -std=c11 -o build/gcc/test11.exe $gcc_params
+    gcc -std=c11 -o build/gcc/test11.exe $sources_test $gcc_params
     success="$?"
     if [ "$success" == "0" ]; then
       echo "C11"
