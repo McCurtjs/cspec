@@ -24,12 +24,133 @@
 
 #include "cspec.h"
 
+describe(cspec_isdigit) {
+
+  it("identifies digits vs non-digits") {
+    expect(cspec_isdigit to be_true given('0'));
+    expect(cspec_isdigit to be_true given('4'));
+    expect(cspec_isdigit to be_false given(4));
+    expect(cspec_isdigit to be_false given('a'));
+  }
+
+}
+
+describe(cspec_memset) {
+  char bytes[20] = { 0 };
+
+  it("correctly sets the memory to the given byte value") {
+    expect(bytes[0] == 0);
+
+    cspec_memset(bytes, 'x', 20);
+
+    expect(bytes to all_be( == , 'x', char, c_array));
+  }
+}
+
+struct test_vec {
+  float x, y;
+};
+
+#undef CSPEC_CUSTOM_TYPES
+#define CSPEC_CUSTOM_TYPES struct test_vec*: "test_vec*",
+
+describe(cspec_memeq) {
+
+  it("returns true given two null pointers") {
+    expect(cspec_memeq to be_true given(NULL, NULL, 5));
+  }
+
+  it("returns false when trying to compare valid memory with null") {
+    int test = 7;
+    expect(cspec_memeq to be_false given(NULL, &test, sizeof(test)));
+    expect(cspec_memeq to be_false given(&test, NULL, sizeof(test)));
+  }
+
+  it("can compare basic types") {
+    int A = 5, B = 5;
+    expect(cspec_memeq to be_true given(&A, &B, sizeof(A)));
+    B = 8;
+    expect(cspec_memeq to be_false given(&A, &B, sizeof(A)));
+  }
+
+  it("can compare structure types") {
+    struct test_vec v1 = { 4, 5 }, v2 = { 4, 5 };
+    expect(cspec_memeq to be_true given(&v1, &v2, sizeof(v1)));
+    v2.x = 5;
+    expect(cspec_memeq to be_false given(&v1, &v2, sizeof(v1)));
+  }
+
+}
+
+describe(cspec_memcpy) {
+  int dst[10] = { 9 };
+
+  it("does nothing when given NULL") {
+    cspec_memcpy(dst, NULL, sizeof(int));
+    cspec_memcpy(NULL, dst, sizeof(int));
+    cspec_memcpy(NULL, NULL, sizeof(NULL));
+    expect(dst[0], == , 9);
+  }
+
+  it("to copy an array of ints") {
+    int test[] = { 1, 2, 3, 4, 5 };
+    cspec_memcpy(dst, test, sizeof(test));
+
+    expect(test to all_be( == , dst[n], int, c_array));
+  }
+
+  it("can copy a struct") {
+    struct test_vec S = { 1.0, 2.0 };
+    struct test_vec D = { 0 };
+    cspec_memcpy(&D, &S, sizeof(struct test_vec));
+    //expect(D to match(S));
+    expect(cspec_memeq to be_true given(&D, &S, sizeof(S)));
+  }
+
+}
+
+describe(cspec_memrev) {
+
+  context("when operating on elements with a size of 1") {
+    char buffer[] = "Reverse";
+
+    it("does nothing when given null or a zero chunk size") {
+      cspec_memrev(NULL, 1, sizeof(buffer));
+      cspec_memrev(buffer, 0, sizeof(buffer));
+      expect(cspec_streq to be_true given(buffer, "Reverse"));
+    }
+
+    it("reverses a memory range") {
+      cspec_memrev(buffer, 1, sizeof(buffer) - 1);
+      expect(cspec_streq to be_true given(buffer, "esreveR"));
+    }
+
+    it("includes the whole memory range") {
+      cspec_memrev(buffer, 1, sizeof(buffer));
+      expect(cspec_streq to be_true given(buffer, ""));
+      expect(cspec_memeq to be_true given(buffer, "\0esreveR", sizeof(buffer)));
+    }
+
+  }
+
+  context("when working with larger elements") {
+    int buffer[] = { 1, 2, 3, 4 };
+
+    it("reverses a memory range of larger objects") {
+      int expected[] = { 4, 3, 2, 1 };
+      cspec_memrev(buffer, sizeof(int), ARRAY_COUNT(buffer));
+      expect(buffer to all_be(== , expected[n], int, c_array));
+    }
+
+  }
+
+}
+
 describe(cspec_strlen) {
 
   it("returns 0 on null or empty") {
-    char* n = NULL;
-    expect(cspec_strlen to be( == , 0u) given(""));
-    expect(cspec_strlen to be( == , 0u) given(n));
+    expect(cspec_strlen to be_zero given(NULL));
+    expect(cspec_strlen to be_zero given(""));
   }
   
   it("gets the length of the string") {
@@ -38,10 +159,6 @@ describe(cspec_strlen) {
 
 }
 
-typedef struct {
-  int x, y;
-} wektor;
-
 describe(cspec_streq) {
 
   char str1[] = "asdf";
@@ -49,140 +166,106 @@ describe(cspec_streq) {
   it("does a basic check") {
     char str2[] = "asdf";
     expect(str1 != str2);
-    expect(cspec_streq(str1, str2));
+
+    expect(cspec_streq to be_true given(str1, str2));
+    expect(cspec_streq to be_true given(str1, str1));
+    expect(cspec_streq to be_true given("", ""));
+    expect(cspec_streq to be_false given("", "1"));
   }
 
   it("checks against null") {
-    //char* str2 = NULL;
-
-    expect(cspec_streq to be_true given(NULL, NULL));
     expect(cspec_streq to be_false given(str1, NULL));
-
-    //wektor wekt;
-    /*
-    typeof(_Generic(str1, void* : NULL, default: str1 + 0)) aaa = str1;
-    typeof(_Generic(NULL, void* : (char*)NULL, default: NULL)+0) bbb = NULL;
-    //typeof(_Generic(wekt, void* : (char*)NULL, struct: wekt, default: wekt)+0) ccc = wekt;
-
-    struct { typeof(str1) data; } ddd;
-    ddd = (typeof(ddd)){ str1 };
-    */
-
-    //typeof(NULL + 0) thing = NULL;
-
-    //struct { typeof(str1) data; } thing = { .data = (typeof(str1))str1 };
-    //typeof(typeof((str1))*) asdf;
-
-
-    //int osi[4] = { 1, 2, 3, 4 };
-    //int* osj = osi;
-
-    //typeof(&osi)* os2;
-    //typeof(os2[0]) os3;
-
-    //typeof(_Generic(&osi, typeof(osi)* : 9, default: osi)) blorb;
-    //typeof(_Generic(osi, typeof(osi) : 1.0, default: 5)) oijsdogij;
-    //typeof(_Generic(osj, typeof(osj) : 1.0, default: 5)) lsdugi;
-    //typeof(_Generic(osi, void* : "", typeof(osi) : osi, default: &osi[0])) dorp;
-
-    char A[] = "test";
-    char* B = A;
-    void* C = B;
-    wektor D = { 1, 2 };
-    float E = 3.7f;
-
-    //#define stupid(P, V) char P[sizeof(V)] = { V }
-
-//#define dumb(V) _Generic(V, void*: "", default: V)
-//#define stupid(P, V) typeof(_Generic(V, typeof(V): V, default: dumb(V)+0)) P = V
-
-#define stupid(P, V) typeof(_Generic(V, typeof(V): V, default: NULL)) P = V
-//#define stupid(P, V) typeof(_Generic(V, typeof(V): V, default: \
-//  _Generic((typeof(V)*)NULL, typeof(V)*: , default: typeof(V)*) \
-//)) P = V
-
-//    typeof(A) eijg;
-
-    stupid(a, A);
-    stupid(b, B);
-    stupid(c, C);
-    stupid(d, D);
-    stupid(e, E);
-    stupid(f, 5);
-    stupid(g, "hi");
-
-    expect(a != NULL);
-    expect(b to not be_null);
-    expect(c == b);
-    expect(d.x != d.y);
-    expect(e > 2);
-    expect(f == 5);
-    expect(g);
-
-    //wektor we = { .x = 1, .y = 2 };
-    //stupid(a, 5);
-    //stupid(b, str1);
-    //stupid(c, NULL);
-    //stupid(d, we);
-
-    //test_log(thing.data[0] ? "thing" : "nope");
-
-    //struct { typeof(str1)* data; } xyz = { .data = &(typeof(str1)) { str1 } };
-
-    //xyz.data;
-
-    //struct asdg { typeof(str1) data; } blah = (struct asdg)(str1);
-    //blah.data = { 'a','s','d','f','\0' };
-    /*
-    struct {
-      typeof(str1) _;
-    } blah = { ._ = str1 };
-    blah = (struct { typeof(str1) _ }) { ._ = str1 };
-
-    test_log(blah._);
-    */
-    /*
-    do {
-      typeof((cspec_streq(str1, str2))) _R = (cspec_streq(str1, str2));
-      csBool _test = ((_R) == ((csBool)0));
-      struct {
-        typeof(str1) _;
-      } _P2 = { ._ = (str1) };
-      struct {
-        typeof(str2) _;
-      } _P1 = { ._ = (str2) };
-      if (!_test) {
-        _cspec_error_typed(54, "expected ""cspec_streq to be_false given(str1, str2)", "%n\nreceived {}" "\nparam ""1"": {}" "\nparam ""2"": {}", "_type""_R", (void*)&_R, "_type""str1", (void*)&_P2._, "_type""str2", (void*)&_P1._, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0); return;
-      };
-    } while (0);
-    expect(cspec_streq to be_true given((char*)NULL, (char*)NULL));
-  */
+    expect(cspec_streq to be_false given(NULL, str1));
+    expect(cspec_streq to be_true given(NULL, NULL));
   }
+
+}
+
+describe(cspec_strrstr) {
+
+  it("correctly handles null pointers") {
+    expect(cspec_strrstr to be_true given("", NULL));
+    expect(cspec_strrstr to be_false given(NULL, ""));
+    expect(cspec_strrstr to be_false given(NULL, NULL));
+  }
+
+  it("detects a match at the end of a string") {
+    expect(cspec_strrstr to be_true given("test.com", ".com"));
+    expect(cspec_strrstr to be_false given("test.com", "atest.com"));
+    expect(cspec_strrstr to be_true given("test", "test"));
+  }
+
 }
 
 describe(cspec_strcpy) {
 
-  //char dst[20] = { 1 };
+  char dst[20] = { 0 };
 
-  it("Copies a string") {
+  it("does nothing when given a null parameter") {
+    dst[0] = 'x';
 
+    cspec_strcpy(NULL, NULL);
+    cspec_strcpy(dst, NULL);
+    expect(dst[0], == , 'x');
   }
 
-}
+  it("matches after a basic copy") {
+    char* test = "Test string";
+    expect(cspec_streq to be_false given(dst, test));
 
-describe(cspec_isdigit) {
+    cspec_strcpy(dst, test);
+
+    //expect(dst to match(test, cspec_streq));
+    //expect(dst to match(test));
+    expect(cspec_streq to be_true given(dst, test));
+  }
+
+  it("caps the string with null, and doesn't modify data after the end.") {
+    cspec_strcpy(dst, "Hello");
+    expect(cspec_streq to be_true given(dst, "Hello"));
+
+    cspec_strcpy(dst, "Hi");
+
+    expect(dst[2] == '\0');
+    expect(cspec_streq to be_true given(dst + 3, "lo"));
+  }
 
 }
 
 describe(cspec_atoi) {
 
+  it("returns 0 when given NULL") {
+    expect(cspec_atoi to be_zero given(NULL));
+  }
+
+  it("converts number strings to integers") {
+    expect(cspec_atoi to be( == , 1) given("1"));
+    expect(cspec_atoi to be( == , 4321) given("4321"));
+  }
+
+  it("supports negative inputs") {
+    expect(cspec_atoi to be( == , -3) given("-3"));
+    expect(cspec_atoi to be( == , -67584930) given("-67584930"));
+  }
+
+  it("skips leading characters spaces") {
+    expect(cspec_atoi to be( == , -12) given(" -12"));
+    expect(cspec_atoi to be( == , -12) given("- 12"));
+    expect(cspec_atoi to be( == , -12) given("a-bc12"));
+  }
+
 }
 
 test_suite(tests_libcs) {
+  test_group(cspec_isdigit),
+  test_group(cspec_memset),
+  test_group(cspec_memeq),
+  test_group(cspec_memcpy),
+  test_group(cspec_memrev),
   test_group(cspec_strlen),
   test_group(cspec_streq),
+  test_group(cspec_strrstr),
   test_group(cspec_strcpy),
-  test_group(cspec_isdigit),
   test_group(cspec_atoi),
   test_suite_end
 };

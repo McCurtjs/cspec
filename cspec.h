@@ -517,15 +517,23 @@ typedef struct TestSuite {
 
 /*
 * \brief Checks if a given value is 0.
-* 
+*
 * \param `expect(an_integer to be_zero);`
 * \param `expect(fn to not be_zero given(params));`
 */
 #define be_zero(A)                ((A) == 0)
 
 /*
+* \brief Checks if a given value is 1.
+*
+* \param `expect(an_integer to be_one);`
+*/
+#define be_one(A)                 ((A) == 1)
+
+/*
 * \brief Not strictly a matcher, but syntax for readability around basic
-*   expressions in some situations.
+*   expressions in some situations, and to more readily match the "be" mode for
+*   container matching (all_be).
 *
 * \brief Example: `expect(subject to be( > , 7));`
 * \brief Example: `expect(function to be( == , 12) given(args));`
@@ -551,6 +559,13 @@ typedef struct TestSuite {
 * \param B - The value to test the subject against, second parameter to fn
 *
 * \param fn - The function to be called
+* 
+* TODO: Replace with generic call that deduces an equality function rather than
+*   manually specifying one. The default (unknown type) should use cspec_memeq
+*   for direct equality comparisons. This will work with basic types, struct
+*   types, and a mode for char* can be included that uses streq. Resulting
+*   expressions take the form: expect(lhs to match(rhs));
+* - Bonus round: have failed results print the funciton used.
 */
 #define match(B, fn)              _fn_comp(fn, B)
 
@@ -854,14 +869,15 @@ void cspec_default_print_backtrace(void);
 *   that doesn't have access to the standard library.
 */
 
+csBool  cspec_isdigit(char c);
+csBool  cspec_memeq(const void* a, const void* b, csSize n);
 void    cspec_memset(void* dst, csByte c, csSize n);
 void    cspec_memcpy(void* dst, const void* src, csSize n);
-void    cspec_strcpy(char* dst, const char* src);
-void    cspec_memrev(void* start_, void* end_);
-csBool  cspec_streq(const char* A, const char* B);
+void    cspec_memrev(void* start_, csSize chunk_size, csSize chunk_count);
 csUint  cspec_strlen(const char* s);
+csBool  cspec_streq(const char* A, const char* B);
 csBool  cspec_strrstr(const char* s, const char* ends_with);
-csBool  cspec_isdigit(char c);
+void    cspec_strcpy(char* dst, const char* src);
 int     cspec_atoi(const char* s);
 
 /*
@@ -976,8 +992,9 @@ void    _cspec_error_typed(int line, const char* pfix, const char* fmt,
 */
 #  pragma warning ( disable : 4189 )
 # endif
-# define _type_s_lit(X, T) _Generic((&X), T**: #T"*", default: #T"[]" )
-# define _type_s_h(X, T) T: #T, T*: _type_s_lit(X, T), const T*: _type_s_lit(X, const T)
+/* # define _type_s_ptr_arr(X, T) _Generic(&(X), T**: #T"*", default: #T"[]" ) // this version works pre C23, but not for literals */
+# define _type_s_ptr_arr(X, T) _Generic((X), typeof(X): #T"*", default: #T"[]")
+# define _type_s_h(X, T) T: #T, T*: _type_s_ptr_arr(X, T), const T*: _type_s_ptr_arr(X, const T)
 //*
 # define _type_s(X) _Generic((X), void*: "void*", const void*: "const void*",                                         \
   CSPEC_CUSTOM_TYPES   _type_s_h(X, _Bool),                                                                           \
@@ -989,7 +1006,7 @@ void    _cspec_error_typed(int line, const char* pfix, const char* fmt,
 //    but then it won't be obvious that the type is not supported, and the output will not be useful
 /*/
 // abridged version that's easier on the visual studio macro previewer, lol
-# if 0
+# if 1
 #  define _type_s(X) _Generic((X),                                            \
   CSPEC_CUSTOM_TYPES                _Bool:              "bool",               \
   _type_s_h(X, char),               _type_s_h(X, int),                        \

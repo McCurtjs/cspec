@@ -137,6 +137,7 @@ static struct InputParams {
   csBool no_expect_fail;    /* -f */
   csBool skip_memory_test;  /* -m */
   csBool show_types;        /* -s */
+  csBool show_results;      /* -r */
 } param;
 
 #define cspec_output_size 512
@@ -197,6 +198,21 @@ static struct TestEnv {
   Useful functions when we don't have a standrad library to rely on
 \*----------------------------------------------------------------------------*/
 
+csBool cspec_isdigit(char c) {
+  return '0' <= c && c <= '9';
+}
+
+csBool cspec_memeq(const void* a_, const void* b_, csSize n) {
+  csByte* a = a_;
+  csByte* b = b_;
+  if (a == b) return TRUE;
+  if (!a || !b) return FALSE;
+  while (n--)
+    if (*a++ != *b++)
+      return FALSE;
+  return TRUE;
+}
+
 void cspec_memset(void* s_, csByte c, csSize n) {
   csByte* s = s_;
   if (!s) return;
@@ -209,20 +225,27 @@ void cspec_memcpy(void* s_, const void* t_, csSize n) {
   while (n--) *(s++) = *(t++);
 }
 
-void cspec_strcpy(char* dst, const char* src) {
-  csUint length = cspec_strlen(src);
-  cspec_memcpy(dst, src, length + 1);
-}
-
-void cspec_memrev(void* start_, void* end_) {
+void cspec_memrev(void* start_, csSize chunk_size, csSize chunk_count) {
   char* start = start_;
-  char* end = end_;
-  if (!start || !end || start >= end) return;
+  if (!start || chunk_size == 0) return;
+  char* end = start + (chunk_count-1) * chunk_size;
+  csSize t = 0;
   while (start < end) {
     char temp = *start;
     *start++ = *end;
-    *--end = temp;
+    *end++ = temp;
+    if (++t == chunk_size) {
+      t = 0;
+      end -= chunk_size * 2;
+    }
   }
+}
+
+csUint cspec_strlen(const char* s) {
+  csUint ret = 0;
+  if (!s) return 0;
+  while (*(s++)) ++ret;
+  return ret;
 }
 
 csBool cspec_streq(const char* A, const char* B) {
@@ -232,13 +255,6 @@ csBool cspec_streq(const char* A, const char* B) {
     if (*A++ != *B++) return FALSE;
   }
   return *A == *B;
-}
-
-csUint cspec_strlen(const char* s) {
-  csUint ret = 0;
-  if (!s) return 0;
-  while (*(s++)) ++ret;
-  return ret;
 }
 
 csBool cspec_strrstr(const char* s, const char* ends_with) {
@@ -254,8 +270,9 @@ csBool cspec_strrstr(const char* s, const char* ends_with) {
   return TRUE;
 }
 
-csBool cspec_isdigit(char c) {
-  return '0' <= c && c <= '9';
+void cspec_strcpy(char* dst, const char* src) {
+  csUint length = cspec_strlen(src);
+  cspec_memcpy(dst, src, length + 1);
 }
 
 int cspec_atoi(const char* s) {
@@ -421,15 +438,12 @@ void cspec_out_bool(csBool b) {
 }
 
 void cspec_out_uint(unsigned long long int i) {
-  if (i == 0) {
-    _cspec_out_ch('0');
-    return;
-  }
   csUint start = test.out.index;
-  while (i) {
+  do {
     _cspec_out_ch('0' + i % 10);
-  }
-  cspec_memrev(test.out.buffer + start, test.out.buffer + test.out.index);
+    i /= 10;
+  } while (i);
+  cspec_memrev(test.out.buffer + start, 1, test.out.index - start);
   _cspec_out_fmt_continue();
 }
 
@@ -1593,11 +1607,7 @@ static csBool resolve_param(const char* typ_N, const void* N) {
   ||  cspec_strrstr(typ_N, "unsigned char*")
   ||  cspec_strrstr(typ_N, "char[]")
   ) {
-    if (cspec_strrstr(typ_N, "[]")) {
-      output_str_quotes((const char*)N, '"');
-    } else {
-      output_str_quotes(*(const char**)N, '"');
-    }
+    output_str_quotes(*(const char**)N, '"');
   }
   else if (cspec_strrstr(typ_N, "*")
   ||  cspec_strrstr(typ_N, "_ptr")
@@ -1632,7 +1642,17 @@ static csBool resolve_param(const char* typ_N, const void* N) {
     output_sint(*(const short int*)N);
   }
   else if (cspec_streq(typ_N, "int")) {
-    output_sint(*(const int*)N);
+    int n = *(const int*)N;
+    output_sint(n);
+    /*
+    if (n >= 0 && n < 256) {
+      output_char_no_fmt(' ');
+      output_char_no_fmt('(');
+      output_char_no_fmt('\'');
+      output_char_no_fmt((char)n);
+      output_char_no_fmt('\'');
+      output_char_no_fmt(')');
+    }*/
   }
   else if
   (  cspec_streq(typ_N, "long")
@@ -2038,15 +2058,17 @@ void _cspec_run_suite(const TestSuite* suite) {
 }
 
 static csBool process_param_basic(char c) {
-  csBool handled = FALSE;
+  csBool handled = TRUE;
   switch (c) {
-    case 'v': handled = TRUE; param.verbose = V_RUN; break;
-    case 'n': handled = TRUE; param.verbose = V_NOTES; break;
-    case 'V': handled = TRUE; param.verbose = V_VERY; break;
-    case 'f': handled = TRUE; param.no_expect_fail = TRUE; break;
-    case 'm': handled = TRUE; param.skip_memory_test = TRUE; break;
-    case 's': handled = TRUE; param.show_types = TRUE; break;
-    case 'p': handled = TRUE; param.padding = TRUE; break;
+    case 'v': param.verbose = V_RUN; break;
+    case 'n': param.verbose = V_NOTES; break;
+    case 'V': param.verbose = V_VERY; break;
+    case 'f': param.no_expect_fail = TRUE; break;
+    case 'm': param.skip_memory_test = TRUE; break;
+    case 's': param.show_types = TRUE; break;
+    case 'r': param.show_results = TRUE; break;
+    case 'p': param.padding = TRUE; break;
+    default: handled = FALSE;
   }
   return handled;
 }
@@ -2083,6 +2105,7 @@ static csBool process_args(int argc, char* argv[]) {
           "\n: p padding                         : adds empty lines around error outputs for readability"
           "\n: t tab-size         n (default 2)  : spaces per indent in test output"
           "\n: f force-fails                     : disables 'expect(to_fail)', printing failure output"
+          "\n: r results                         : prints extended results on success (todo)"
           "\n: m ignore-memory                   : disables memory testing"
           "\n: s show-types                      : prints deduced types in error output"
         );
@@ -2095,6 +2118,11 @@ static csBool process_args(int argc, char* argv[]) {
       ( cspec_streq(arg, "--force-fails")
       ) {
         process_param_basic('f');
+
+      } else if
+      ( cspec_streq(arg, "--results")
+      ) {
+        process_param_basic('r');
 
       } else if
       ( cspec_streq(arg, "--ignore-memory")
