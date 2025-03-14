@@ -941,6 +941,41 @@ void cspec_out_print(void);
 # define ARRAY_COUNT(arr) (sizeof(arr) / sizeof(*arr))
 #endif
 
+#ifndef CSPEC_USE_DEDUCTION
+# if __STDC_VERSION__ >= 202311
+/*
+* \brief CSpec type deduction is enabled by default because you're using a C23
+*   complient compiler. You can disable this using a compiler flag.
+* 
+* \brief Disable completely:            -DCSPEC_USE_DEDUCTION=0
+* \brief Use _Generic, but not typeof:  -DCSPEC_USE_DEDUCTION=1
+*/
+#  define CSPEC_USE_DEDUCTION 2
+# elif __STDC_VERSION__ >= 201112
+/*
+* \brief CSpec type deduction is enabled, but limited to C11 features (_Generic,
+*   excluding typeof).
+* 
+* \brief You can manually enable it with a compiler flag if your compiler
+*   supports the necessary extended features:
+* 
+* \brief _Generic:  -DCSPEC_USE_DEDUCTION=2
+*/
+#  define CSPEC_USE_DEDUCTION 1
+# else
+/*
+* \brief CSpec type deduction is disabled.
+* 
+* \brief You can manually enable it with a compiler flag if your compiler
+*   supports the necessary extended features:
+* 
+* \brief _Generic:  -DCSPEC_USE_DEDUCTION=1
+* \brief + typeof:  -DCSPEC_USE_DEDUCTION=2
+*/
+#  define CSPEC_USE_DEDUCTION 0
+# endif
+#endif
+
 /*----------------------------------------------------------------------------*\
   Internal functions
 \*----------------------------------------------------------------------------*/
@@ -1035,7 +1070,8 @@ void    _cspec_error_typed(int line, const char* pfix, const char* fmt,
 # define _csva_exp(F, G, ...) _csva_exp_va(F,G,__VA_ARGS__,9,8,7,6,5,4,3,2,1)
 
 # define _param_mty(N, P, ...)
-# define _param_def(N, P, ...) typeof(_Generic((P), typeof(P): (P), default: (void*)0)) MACRO_CONCAT(_P, N) = (P);
+//# define _param_def(N, P, ...) typeof(_Generic((P), typeof(P): (P), default: (void*)0)) MACRO_CONCAT(_P, N) = (P);
+# define _param_def(N, P, ...) typeof((0, P)) MACRO_CONCAT(_P, N) = (P);
 # define _param_arg(N, P, ...) _type_s(P), (void*)&MACRO_CONCAT(_P, N),
 # define _param_str(N, P, ...) "\nparam "#N": {}"
 
@@ -1050,7 +1086,7 @@ void    _cspec_error_typed(int line, const char* pfix, const char* fmt,
 
 /* This should be reduced to just "auto" once MSVC supports it */
 # if __STDC_VERSION__ < 202311 || defined(_MSC_VER)
-#  define AUTO_T(VAR, RHS) typeof(RHS) VAR = RHS
+#  define AUTO_T(VAR, RHS) typeof((0, RHS)) VAR = (RHS)
 # else
 /* check support for gcc and clang */
 #  define AUTO_T(VAR, RHS) auto VAR = RHS

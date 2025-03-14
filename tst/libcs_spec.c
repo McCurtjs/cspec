@@ -36,6 +36,7 @@ describe(cspec_isdigit) {
 }
 
 describe(cspec_memset) {
+
   char bytes[20] = { 0 };
 
   it("correctly sets the memory to the given byte value") {
@@ -83,6 +84,7 @@ describe(cspec_memeq) {
 }
 
 describe(cspec_memcpy) {
+
   int dst[10] = { 9 };
 
   it("does nothing when given NULL") {
@@ -111,14 +113,22 @@ describe(cspec_memcpy) {
 
 describe(cspec_memrev) {
 
-  context("when operating on elements with a size of 1") {
-    char buffer[] = "Reverse";
+  it("does nothing when given null or a zero chunk size") {
+    csUint testvar = 1u;
+    cspec_memrev(NULL, 1, sizeof(testvar));
+    cspec_memrev(&testvar, 0, sizeof(testvar));
+    expect(testvar, == , 1u);
+  }
 
-    it("does nothing when given null or a zero chunk size") {
-      cspec_memrev(NULL, 1, sizeof(buffer));
-      cspec_memrev(buffer, 0, sizeof(buffer));
-      expect(cspec_streq to be_true given(buffer, "Reverse"));
-    }
+  it("reverses the bytes of a variable") {
+    csUint testvar = 0xff;
+    cspec_memrev(&testvar, 1, sizeof(testvar));
+    expect(testvar, == , 0xff000000);
+  }
+
+  context("when operating on elements with a size of 1") {
+
+    char buffer[] = "Reverse";
 
     it("reverses a memory range") {
       cspec_memrev(buffer, 1, sizeof(buffer) - 1);
@@ -134,12 +144,20 @@ describe(cspec_memrev) {
   }
 
   context("when working with larger elements") {
+
     int buffer[] = { 1, 2, 3, 4 };
 
     it("reverses a memory range of larger objects") {
       int expected[] = { 4, 3, 2, 1 };
       cspec_memrev(buffer, sizeof(int), ARRAY_COUNT(buffer));
-      expect(buffer to all_be(== , expected[n], int, c_array));
+      expect(buffer to all_be( == , expected[n], int, c_array));
+    }
+
+    it("can operate on a sub-range") {
+      int expected[] = { 1, 3, 2, 4 };
+      cspec_memrev(buffer + 1, sizeof(int), ARRAY_COUNT(buffer) - 2);
+      expect(buffer to all_be( == , expected[n], int, c_array));
+      expect(buffer to all(be_true, int, c_array));
     }
 
   }
@@ -215,7 +233,7 @@ describe(cspec_strcpy) {
 
     cspec_strcpy(dst, test);
 
-    //expect(dst to match(test, cspec_streq));
+    expect(dst to match(test, cspec_streq));
     //expect(dst to match(test));
     expect(cspec_streq to be_true given(dst, test));
   }

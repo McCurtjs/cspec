@@ -33,7 +33,6 @@ extern TestSuite tests_cspec;
 
 #include <stdio.h>
 
-
 #ifdef __WASM__
 void __attribute((export_name("set_line"))) test_set_line(int line);
 

@@ -203,8 +203,8 @@ csBool cspec_isdigit(char c) {
 }
 
 csBool cspec_memeq(const void* a_, const void* b_, csSize n) {
-  csByte* a = a_;
-  csByte* b = b_;
+  const csByte* a = a_;
+  const csByte* b = b_;
   if (a == b) return TRUE;
   if (!a || !b) return FALSE;
   while (n--)
