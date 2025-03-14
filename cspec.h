@@ -545,6 +545,18 @@ typedef struct TestSuite {
 #define be(x, B)                  x, B
 
 /*
+* \brief Alias for be( == , B)
+*
+* \brief Example: `expect(subject to equal(10));`
+* \brief Example: `expect(fn to equal(5) given(params));`
+*/
+#define equal(B)                  ==, B
+
+#define _match_fns(B) _Generic((B), \
+  char*: cspec_streq, const char*: cspec_streq, default: cspec_memeq \
+)
+
+/*
 * \brief Evaluates the result of a function given two arguments. This is
 *   functionally the same as `expect(function(subject, param_2))` except that
 *   it can deduce the types of and print the function arguments and result.
@@ -883,6 +895,9 @@ int     cspec_atoi(const char* s);
 /*
 * \brief CSpec output functions
 */
+
+
+
 const char* cspec_out_read(void);
 void cspec_out_fmt_begin(void);
 void cspec_out_fmt_end(void);
@@ -1086,7 +1101,7 @@ void    _cspec_error_typed(int line, const char* pfix, const char* fmt,
 
 /* This should be reduced to just "auto" once MSVC supports it */
 # if __STDC_VERSION__ < 202311 || defined(_MSC_VER)
-#  define AUTO_T(VAR, RHS) typeof((0, RHS)) VAR = (RHS)
+#  define AUTO_T(VAR, RHS) typeof((0, RHS)) VAR = RHS
 # else
 /* check support for gcc and clang */
 #  define AUTO_T(VAR, RHS) auto VAR = RHS
@@ -1116,22 +1131,22 @@ void    _cspec_error_typed(int line, const char* pfix, const char* fmt,
 #define _test_fail_args(S, /* fmt, */ ...) _test_fail_args_va(S,__VA_ARGS__,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0)
 
 #define _test_fail_t(A, x, B, sTa, sTb) { _test_fail_args("expected "#A" "#x" "#B, "%n\nreceived {} "#x" {}", sTa, (void*)&_A, sTb, (void*)&_B); return; }
-#define _test_fail_all(S, T) {                                                                                                                          \
-  _test_fail_args("expected "S, NULL);                                                                                                                  \
-    if (_pvalue) {                                                                                                                                      \
-    if (_print_expected_value) _test_fail_args("", "but found {} on iteration {}\nexpecting {}", #T, (void*)_pvalue, "uint", &_index, #T, &_expected);  \
-    else                       _test_fail_args("", "but found {} on iteration {}",               #T, (void*)_pvalue, "uint", &_index);                  \
-    return;                                                                                                                                             \
-  } }                                                                                                                                                   //
+#define _test_fail_all(S, T) {                                                                                                                            \
+  _test_fail_args("expected "S, NULL);                                                                                                                    \
+    if (_pvalue) {                                                                                                                                        \
+      if (_print_expected_value) _test_fail_args("", "but found {} on iteration {}\nexpecting {}", #T, (void*)_pvalue, "uint", &_index, #T, &_expected);  \
+      else                       _test_fail_args("", "but found {} on iteration {}",               #T, (void*)_pvalue, "uint", &_index);                  \
+    return;                                                                                                                                               \
+  } }                                                                                                                                                  /**/
 
 #define _expect_fn_expr(S, F, x, B, P, ...)         AUTO_T(_R, (F P));    AUTO_T(_B, (B));         _param_fn_def P  if (!(_R x _B))   _test_fail_fn_expr(F, x, B, P)
 #define _expect_fn_comp(S, F, M, P, ...)            AUTO_T(_R, (F P));    csBool    _test = M(_R); _param_fn_def P  if (!_test)       _test_fail_fn_comp(S, P)
-#define _expect_fn_true(S, A, F, B, ...)            AUTO_T(_A, A);        AUTO_T(_B, B);                            if (!(F(_A, _B))) _test_fail_fn_true(F, A, B)
+#define _expect_fn_true(S, A, F, B, ...)            AUTO_T(_A, (A));      AUTO_T(_B, (B));                          if (!(F(_A, _B))) _test_fail_fn_true(F, A, B)
 #define _expect_comp_all(S, A, E, B, x, T, F, ...)                        csBool    _test = F(A, B, E, x);          if (!_test)       _test_fail_all(S, T)
-#define _expect_type2(S, A, x, B, T, t, ...)        T           _A=(A);   t         _B=(B);                         if (!(_A x _B))   _test_fail_t(A, x, B, #T, #t)
-#define _expect_type1(S, A, x, B, T, ...)           T           _A=(A);   T         _B=(B);                         if (!(_A x _B))   _test_fail_t(A, x, B, #T, #T)
+#define _expect_type2(S, A, x, B, T, t, ...)        T      _A=(A);        t      _B=(B);                            if (!(_A x _B))   _test_fail_t(A, x, B, #T, #t)
+#define _expect_type1(S, A, x, B, T, ...)           T      _A=(A);        T      _B=(B);                            if (!(_A x _B))   _test_fail_t(A, x, B, #T, #T)
 #define _expect_expr(S, A, x, B, ...)               AUTO_T(_A, (A));      AUTO_T(_B, (B));                          if (!(_A x _B))   _test_fail_t(A, x, B, _type_s(_A), _type_s(_B))
-#define _expect_comp(S, A, F, ...)                  AUTO_T(_Aout, (A));   csBool    _test = F(_Aout);               if (!_test)       _test_fail_comp(S)
+#define _expect_comp(S, A, F, ...)                  AUTO_T(_Aout, (A));   csBool _test = F(_Aout);                  if (!_test)       _test_fail_comp(S)
 #define _expect_true(S, A, ...)                                                                                     if (!(A))         _test_fail("line "STR(__LINE__)": expected "S)
 #define _expect_va(S, U, V, W, X, Y, Z,_0,_1,_2, F, ...) do { _expect##F(S, U, V, W, X, Y, Z); } while(0)
 #define _expect(S, ...) _expect_va(S, __VA_ARGS__, _fn_expr, _fn_comp, _fn_true, _comp_all, _type2, _type1, _expr, _comp, _true)

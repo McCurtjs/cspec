@@ -651,7 +651,7 @@ describe(function_matchers) {
     }
 
     it("uses the 'given' composition with one parameter") {
-      expect(cspec_strlen to be( == , str_size) given(str));
+      expect(cspec_strlen to equal(str_size) given(str));
     }
 
   }

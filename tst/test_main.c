@@ -52,7 +52,9 @@ int main(int argc, char* argv[]) {
 
   cspec_opt_print_backtrace = cspec_default_print_backtrace;
 
-  cspec_print("C VERSION " STR(__STDC_VERSION__));
+  cspec_out_fmt("C Version: {}!");
+  cspec_out_uint(__STDC_VERSION__);
+  cspec_out_print();
 
   return cspec_run_all(test_suites);
 }

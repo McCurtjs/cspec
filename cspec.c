@@ -299,7 +299,7 @@ int cspec_atoi(const char* s) {
 * should be done in a static space to avoid the need for malloc/free.
 */
 #define output_size 511
-#define output_float_precision 10
+#define cspec_out_float_precision 10
 
 
 static void _cspec_out_ch(char ch) {
@@ -362,7 +362,7 @@ static void _cspec_out_fmt_continue(void) {
   /* get length from start to next {} or \0 */
   csUint i;
   const char* next_fmt = NULL;
-  for (i = 0; *fmt; ++i) {
+  for (i = 0; fmt[i]; ++i) {
     if (fmt[i] == '{' && fmt[i + 1] == '}') {
       if (fmt[i + 2]) next_fmt = &fmt[i + 2];
       break;
@@ -481,64 +481,60 @@ static void _cspec_out_float(double f, int precision) {
   f -= integer_part;
   f *= precision;
   cspec_out_uint((unsigned long long int)f);
-  while (test.out.buffer[--test.out.index] == '0') {
-    if (test.out.buffer[test.out.index] == '.') {
-      ++test.out.index;
-      break;
-    }
+  while (test.out.buffer[--test.out.index] == '0');
+  if (test.out.buffer[test.out.index++] == '.') {
+    ++test.out.index;
   }
   cspec_out_fmt_end();
   /* out_fmt_end calls fmt_continue */
 }
 
 void cspec_out_float(double f) {
-  _cspec_out_float(f, output_float_precision);
+  _cspec_out_float(f, cspec_out_float_precision);
   _cspec_out_fmt_continue();
 }
 
-void cspec_out_print(void) {
-
-}
-
-
-
-
-
-
-
-#if 0
-void cspec_print(ConsoleColor color) {
+static void _cspec_out_print(ConsoleColor color) {
   /* flush any remaining format string */
-  if (output_fmt) output_str(output_fmt);
+  test.out.fmt_lock = 0;
+  cspec_out_str(test.out.fmt);
+  test.out.fmt = NULL;
+  test.out.buffer[test.out.index] = '\0';
 
-#ifndef __WASM__
+#ifdef __WASM__
+  js_log(test.out.buffer, test.out.index, color);
+#else
   /* find the color specifier if it was added into the string */
-  for (csUint i = 0; i < output_index; ++i) {
-    if (output_buffer[i] == '\033') {
+  char* c = test.out.buffer;
+  while (*c) {
+    if (*c == '\033') {
       /* set boldness flag */
-      output_buffer[i + 2] = color >= 40 ? '1' : '0';
+      c[2] = color >= 40 ? '1' : '0';
 
       /* fill out the color code being requested */
-      output_buffer[i + 5] = '0' + color % 10;
+      c[5] = '0' + color % 10;
 
       /* cap the string with a closing color specifier */
-      output_str("\033[0m");
-
+      cspec_out_str("\033[0m");
       break;
     }
+    ++c;
   }
+
+  puts(test.out.buffer);
 #endif
 
-  // finally print the string
-#ifdef __WASM__
-  js_log(output_buffer, output_index, color);
-#else
-  puts(output_buffer);
-#endif
-
-  output_reset();
+  test.out.buffer[0] = '\0';
+  test.out.index = 0;
 }
-#endif
+
+void cspec_out_print(void) {
+  _cspec_out_print(CONCOL_White);
+}
+
+
+
+
 
 
 
@@ -733,7 +729,7 @@ static void output_float_p(double f, int precision) {
 }
 
 static void output_float(double f) {
-  output_float_p(f, output_float_precision);
+  output_float_p(f, cspec_out_float_precision);
 }
 
 static void output_bool(csBool b) {
