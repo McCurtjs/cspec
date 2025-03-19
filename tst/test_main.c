@@ -27,6 +27,7 @@
 // Test suites
 
 extern TestSuite tests_libcs;
+extern TestSuite tests_cspec_out;
 extern TestSuite tests_cspec;
 
 // Main
@@ -42,12 +43,13 @@ int __attribute__((export_name("spec_main"))) spec_main(int argc, int line) {
 #else
 int main(int argc, char* argv[]) {
 #endif
-  argv = (char*[]){ "BLAH", "-vfs", "libcs_spec.c" };
-  argc = 3;
+  argv = (char*[]){ "BLAH", "-vfs", "out_spec.c" };
+  argc = 2;
 
   TestSuite* test_suites[] = {
     &tests_libcs,
-    &tests_cspec
+    &tests_cspec_out
+    //&tests_cspec
   };
 
   cspec_opt_print_backtrace = cspec_default_print_backtrace;

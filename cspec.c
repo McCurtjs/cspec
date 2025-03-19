@@ -241,8 +241,8 @@ void cspec_memrev(void* start_, csSize chunk_size, csSize chunk_count) {
   }
 }
 
-csUint cspec_strlen(const char* s) {
-  csUint ret = 0;
+csSize cspec_strlen(const char* s) {
+  csSize ret = 0;
   if (!s) return 0;
   while (*(s++)) ++ret;
   return ret;
@@ -260,19 +260,22 @@ csBool cspec_streq(const char* A, const char* B) {
 csBool cspec_strrstr(const char* s, const char* ends_with) {
   if (!s) return FALSE;
   if (!ends_with) return TRUE;
-  csUint len_s = cspec_strlen(s);
-  csUint len_e = cspec_strlen(ends_with);
+  csSize len_s = cspec_strlen(s);
+  csSize len_e = cspec_strlen(ends_with);
   if (len_e > len_s) return FALSE;
   s += len_s - len_e;
-  for (csUint i = 0; i < len_e; ++i) {
+  for (csSize i = 0; i < len_e; ++i) {
     if (s[i] != ends_with[i]) return FALSE;
   }
   return TRUE;
 }
 
-void cspec_strcpy(char* dst, const char* src) {
-  csUint length = cspec_strlen(src);
+void cspec_strncpy(char* dst, const char* src, csSize n_dst) {
+  if (!dst || !src || n_dst == 0u) return;
+  csSize length = cspec_strlen(src);
+  if (length >= n_dst) length = n_dst - 1;
   cspec_memcpy(dst, src, length + 1);
+  dst[length] = '\0';
 }
 
 int cspec_atoi(const char* s) {
@@ -308,18 +311,18 @@ static void _cspec_out_ch(char ch) {
   }
 }
 
-static void _cspec_out_str(const char* s, csUint length) {
+static void _cspec_out_str(const char* s, csSize length) {
   if (test.out.index + length >= cspec_max_output_size) {
     length = cspec_max_output_size - test.out.index;
   }
 
-  for (csUint i = 0; *s && i < length; ++i) {
+  for (csSize i = 0; *s && i < length; ++i) {
 
     switch (*s) {
 
       case '\n': {
         _cspec_out_ch(*s++);
-        for (csUint i = 0; i < test.out.indent; ++i) {
+        for (csUint j = 0; j < test.out.indent; ++j) {
           _cspec_out_ch(' ');
         }
       } break;
@@ -393,6 +396,7 @@ void cspec_out_clear(void) {
   test.out.index = 0;
   test.out.fmt = NULL;
   test.out.fmt_lock = 0;
+  test.out.buffer[0] = '\0';
 }
 
 void cspec_out_fmt(const char* fmt) {
@@ -404,7 +408,7 @@ void cspec_out_fmt(const char* fmt) {
 
 void cspec_out_str(const char* s) {
   if (!s) return;
-  csUint length = cspec_strlen(s);
+  csSize length = cspec_strlen(s);
   _cspec_out_str(s, length);
   _cspec_out_fmt_continue();
 }
@@ -524,8 +528,7 @@ static void _cspec_out_print(ConsoleColor color) {
   puts(test.out.buffer);
 #endif
 
-  test.out.buffer[0] = '\0';
-  test.out.index = 0;
+  cspec_out_clear();
 }
 
 void cspec_out_print(void) {
@@ -1433,6 +1436,19 @@ csBool _cspec_context_end(int line) {
   /* Pop the context from the stack */
   ctx_stack_index = --ctx_stack_top;
 
+  /*
+  * True here to force a return after executing a context when no tests were
+  * actually executed, either because it's empty or all the tests have already
+  * finished. We don't want to continue to the next test block if this context
+  * had allocated or connected to something exterlal.
+  * 
+  * TODO: This should probably still be better handled in case there is any test
+  * cleanup code after all the contexts, ex, to clear memory allocated somewhere
+  * other than cspec's allocator. If this would return true here, instead set a
+  * flag that prevents all other tests from running but doesn't cancel execution
+  * of the describe function (closing statements should still be run, but after
+  * blocks should not).
+  */
   return TRUE;
 }
 

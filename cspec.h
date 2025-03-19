@@ -398,6 +398,7 @@ typedef struct TestSuite {
 */
 #define null_malloc               _cspec_memory_malloc_null(TRUE)
 #define malloc_failure            _cspec_memory_malloc_null(TRUE)
+#define malloc_to_fail            _cspec_memory_malloc_null(TRUE)
 
 /*
 * \brief Force all remaining attempts to allocate memory for this test to fail.
@@ -409,6 +410,7 @@ typedef struct TestSuite {
 */
 #define null_mallocs              _cspec_memory_malloc_null(FALSE)
 #define malloc_failures           _cspec_memory_malloc_null(FALSE)
+#define malloc_to_always_fail     _cspec_memory_malloc_null(FALSE)
 
 /*
 * \brief Force realloc to always move memory for the remainder of the test, even
@@ -886,17 +888,15 @@ csBool  cspec_memeq(const void* a, const void* b, csSize n);
 void    cspec_memset(void* dst, csByte c, csSize n);
 void    cspec_memcpy(void* dst, const void* src, csSize n);
 void    cspec_memrev(void* start_, csSize chunk_size, csSize chunk_count);
-csUint  cspec_strlen(const char* s);
+csSize  cspec_strlen(const char* s);
 csBool  cspec_streq(const char* A, const char* B);
 csBool  cspec_strrstr(const char* s, const char* ends_with);
-void    cspec_strcpy(char* dst, const char* src);
+void    cspec_strncpy(char* dst, const char* src, csSize n_dst);
 int     cspec_atoi(const char* s);
 
 /*
 * \brief CSpec output functions
 */
-
-
 
 const char* cspec_out_read(void);
 void cspec_out_fmt_begin(void);
@@ -989,6 +989,19 @@ void cspec_out_print(void);
 */
 #  define CSPEC_USE_DEDUCTION 0
 # endif
+#endif
+
+#if CSPEC_USE_DEDUCTION >= 3 && !defined(_MSC_VER)
+/* Clang and GCC properly support auto, MSVC does not */
+# define AUTO_DUP(NAME, VALUE) auto NAME = VALUE
+#elif CSPEC_USE_DEDUCTION >= 2
+# define AUTO_DUP(NAME, VALUE) typeof((0, VALUE)) NAME = VALUE
+#elif CSPEC_USE_DEDUCTION >= 1
+# define AUTO_DUP(NAME, VALUE) char NAME[sizeof(VALUE)]; cspec_memcpy(NAME, &VALUE, sizeof(VALUE))
+#endif
+
+#if !defined(CSPEC_CUSTOM_TYPES) && CSPEC_USE_DEDUCTION > 0
+# define CSPEC_CUSTOM_TYPES
 #endif
 
 /*----------------------------------------------------------------------------*\
@@ -1086,7 +1099,7 @@ void    _cspec_error_typed(int line, const char* pfix, const char* fmt,
 
 # define _param_mty(N, P, ...)
 //# define _param_def(N, P, ...) typeof(_Generic((P), typeof(P): (P), default: (void*)0)) MACRO_CONCAT(_P, N) = (P);
-# define _param_def(N, P, ...) typeof((0, P)) MACRO_CONCAT(_P, N) = (P);
+# define _param_def(N, P, ...) AUTO_DUP(MACRO_CONCAT(_P, N), (P));
 # define _param_arg(N, P, ...) _type_s(P), (void*)&MACRO_CONCAT(_P, N),
 # define _param_str(N, P, ...) "\nparam "#N": {}"
 
@@ -1094,29 +1107,21 @@ void    _cspec_error_typed(int line, const char* pfix, const char* fmt,
 # define _param_fn_arg(...) _csva_exp(_param_arg, _param_mty, __VA_ARGS__)
 # define _param_fn_str(...) _csva_exp(_param_mty, _param_str, __VA_ARGS__)
 
-# define _test_fail_comp(S) { _test_fail_args("expected "S, "%n\nreceived {}", _type_s(_Aout), (void*)&_Aout); return; }
+# define _test_fail_comp(S) { _test_fail_args("expected "S, "%n\nreceived {}", _type_s(_R), (void*)&_R); return; }
 # define _test_fail_fn_expr(F, x, B, P) { _test_fail_args("expected X "#x" "#B" where X == "#F#P, "%n\nreceived {} "#x" {}" _param_fn_str P, _type_s(_R), (void*)&_R, _type_s(_B), (void*)&_B, _param_fn_arg P 0); return; }
-# define _test_fail_fn_comp(S, P) { _test_fail_args("expected "S, "%n\nreceived {}" _param_fn_str P, _type_s(_R), (void*)&_R, _param_fn_arg P 0); return; }
-# define _test_fail_fn_true(F, A, B) { _test_fail_args("expected to pass "#F"("#A", "#B")", "%n\nparam 1: {}\nparam 2: {}", _type_s(_A), (void*)&_A, _type_s(_B), (void*)&_B); return; }
-
-/* This should be reduced to just "auto" once MSVC supports it */
-# if __STDC_VERSION__ < 202311 || defined(_MSC_VER)
-#  define AUTO_T(VAR, RHS) typeof((0, RHS)) VAR = RHS
-# else
-/* check support for gcc and clang */
-#  define AUTO_T(VAR, RHS) auto VAR = RHS
-# endif
+# define _test_fail_fn_comp(S, P)       { _test_fail_args("expected "S, "%n\nreceived {}" _param_fn_str P, _type_s(_R), (void*)&_R, _param_fn_arg P 0); return; }
+# define _test_fail_fn_true(F, A, B)    { _test_fail_args("expected to pass "#F"("#A", "#B")", "%n\nparam 1: {}\nparam 2: {}", _type_s(_A), (void*)&_A, _type_s(_B), (void*)&_B); return; }
 
 #endif
 
-#define _loop_tst MACRO_CONCAT(_loop_tst_, __LINE__)
 #define _loop_ctx MACRO_CONCAT(_loop_ctx_, __LINE__)
 #define _iter_all MACRO_CONCAT(_iter_all_, __LINE__)
 #define _loop_all n
 
 #define _describe(NAME) static const int _fn_line_##NAME = __LINE__; void test_##NAME(void)
+/*      _context(DESC) for (;_cspec_context_begin(__LINE__, "..."DESC) || _cspec_context_end(__LINE__);) */
 #define _context(DESC) for (int _loop_ctx = 0; (_loop_ctx++ < 2) && _cspec_context_begin(__LINE__, "context: %c["LINESTR"] "DESC);) if (_loop_ctx == 2) { if (_cspec_context_end(__LINE__)) return; } else
-#define _test(DESC) for (int _loop_tst = 0; _loop_tst++ < 1 && _cspec_begin(__LINE__, "test %c["LINESTR"] "DESC);)
+#define _test(DESC) for (;_cspec_begin(__LINE__, "test %c["LINESTR"] "DESC);)
 #define _after for (int _loop_ctx = 0; _loop_ctx++ < 1 && _cspec_active();)
 
 #define _test_suite(NAME) TestSuite NAME = { .header="in file: %c"__FILE__, .filename=__FILE__, .test_groups = (TestGroup(*)[])(&(TestGroup[])
@@ -1139,14 +1144,14 @@ void    _cspec_error_typed(int line, const char* pfix, const char* fmt,
     return;                                                                                                                                               \
   } }                                                                                                                                                  /**/
 
-#define _expect_fn_expr(S, F, x, B, P, ...)         AUTO_T(_R, (F P));    AUTO_T(_B, (B));         _param_fn_def P  if (!(_R x _B))   _test_fail_fn_expr(F, x, B, P)
-#define _expect_fn_comp(S, F, M, P, ...)            AUTO_T(_R, (F P));    csBool    _test = M(_R); _param_fn_def P  if (!_test)       _test_fail_fn_comp(S, P)
-#define _expect_fn_true(S, A, F, B, ...)            AUTO_T(_A, (A));      AUTO_T(_B, (B));                          if (!(F(_A, _B))) _test_fail_fn_true(F, A, B)
-#define _expect_comp_all(S, A, E, B, x, T, F, ...)                        csBool    _test = F(A, B, E, x);          if (!_test)       _test_fail_all(S, T)
-#define _expect_type2(S, A, x, B, T, t, ...)        T      _A=(A);        t      _B=(B);                            if (!(_A x _B))   _test_fail_t(A, x, B, #T, #t)
-#define _expect_type1(S, A, x, B, T, ...)           T      _A=(A);        T      _B=(B);                            if (!(_A x _B))   _test_fail_t(A, x, B, #T, #T)
-#define _expect_expr(S, A, x, B, ...)               AUTO_T(_A, (A));      AUTO_T(_B, (B));                          if (!(_A x _B))   _test_fail_t(A, x, B, _type_s(_A), _type_s(_B))
-#define _expect_comp(S, A, F, ...)                  AUTO_T(_Aout, (A));   csBool _test = F(_Aout);                  if (!_test)       _test_fail_comp(S)
+#define _expect_fn_expr(S, F, x, B, P, ...)         AUTO_DUP(_R , (F P)); AUTO_DUP(_B    , (B));  _param_fn_def P   if (!(_R x _B))   _test_fail_fn_expr(F, x, B, P)
+#define _expect_fn_comp(S, F, M, P, ...)            AUTO_DUP(_R , (F P)); csBool   _test = M(_R); _param_fn_def P   if (!_test)       _test_fail_fn_comp(S, P)
+#define _expect_fn_true(S, A, F, B, ...)            AUTO_DUP(_A , (A));   AUTO_DUP(_B    , (B));                    if (!(F(_A, _B))) _test_fail_fn_true(F, A, B)
+#define _expect_comp_all(S, A, E, B, x, T, F, ...)                        csBool   _test = F(A, B, E, x);           if (!_test)       _test_fail_all(S, T)
+#define _expect_type2(S, A, x, B, T, t, ...)        T        _A = (A);    t        _B    = (B);                     if (!(_A x _B))   _test_fail_t(A, x, B, #T, #t)
+#define _expect_type1(S, A, x, B, T, ...)           T        _A = (A);    T        _B    = (B);                     if (!(_A x _B))   _test_fail_t(A, x, B, #T, #T)
+#define _expect_expr(S, A, x, B, ...)               AUTO_DUP(_A , (A));   AUTO_DUP(_B    , (B));                    if (!(_A x _B))   _test_fail_t(A, x, B, _type_s(_A), _type_s(_B))
+#define _expect_comp(S, A, F, ...)                  AUTO_DUP(_R , (A));   csBool   _test = F(_R);                   if (!_test)       _test_fail_comp(S)
 #define _expect_true(S, A, ...)                                                                                     if (!(A))         _test_fail("line "STR(__LINE__)": expected "S)
 #define _expect_va(S, U, V, W, X, Y, Z,_0,_1,_2, F, ...) do { _expect##F(S, U, V, W, X, Y, Z); } while(0)
 #define _expect(S, ...) _expect_va(S, __VA_ARGS__, _fn_expr, _fn_comp, _fn_true, _comp_all, _type2, _type1, _expr, _comp, _true)

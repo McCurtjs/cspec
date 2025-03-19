@@ -31,8 +31,9 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
   target_link_libraries(${PROJECT_NAME}_specs PRIVATE CSpec)
   target_sources(${PROJECT_NAME}_specs PRIVATE
   ./tst/test_main.c
-  ./tst/cspec_spec.c
   ./tst/libcs_spec.c
+  ./tst/out_spec.c
+  ./tst/cspec_spec.c
   )
 
   if (MSVC)

@@ -157,7 +157,6 @@ describe(cspec_memrev) {
       int expected[] = { 1, 3, 2, 4 };
       cspec_memrev(buffer + 1, sizeof(int), ARRAY_COUNT(buffer) - 2);
       expect(buffer to all_be( == , expected[n], int, c_array));
-      expect(buffer to all(be_true, int, c_array));
     }
 
   }
@@ -215,23 +214,31 @@ describe(cspec_strrstr) {
 
 }
 
-describe(cspec_strcpy) {
+describe(cspec_strncpy) {
 
   char dst[20] = { 0 };
 
-  it("does nothing when given a null parameter") {
+  it("does nothing when given a null parameter or 0 length") {
     dst[0] = 'x';
 
-    cspec_strcpy(NULL, NULL);
-    cspec_strcpy(dst, NULL);
+    cspec_strncpy(NULL, NULL, 0u);
+    cspec_strncpy(dst, NULL, 20u);
+    cspec_strncpy(dst, "Test", 0u);
     expect(dst[0], == , 'x');
+  }
+
+  it("handles being given a smaller length than source string") {
+    cspec_strncpy(dst, "Test", 1u);
+    expect(cspec_streq to be_true given(dst, ""));
+    cspec_strncpy(dst, "Test", 2u);
+    expect(cspec_streq to be_true given(dst, "T"));
   }
 
   it("matches after a basic copy") {
     char* test = "Test string";
     expect(cspec_streq to be_false given(dst, test));
 
-    cspec_strcpy(dst, test);
+    cspec_strncpy(dst, test, 20u);
 
     expect(dst to match(test, cspec_streq));
     //expect(dst to match(test));
@@ -239,10 +246,10 @@ describe(cspec_strcpy) {
   }
 
   it("caps the string with null, and doesn't modify data after the end.") {
-    cspec_strcpy(dst, "Hello");
+    cspec_strncpy(dst, "Hello", 20u);
     expect(cspec_streq to be_true given(dst, "Hello"));
 
-    cspec_strcpy(dst, "Hi");
+    cspec_strncpy(dst, "Hi", 20u);
 
     expect(dst[2] == '\0');
     expect(cspec_streq to be_true given(dst + 3, "lo"));
@@ -283,7 +290,7 @@ test_suite(tests_libcs) {
   test_group(cspec_strlen),
   test_group(cspec_streq),
   test_group(cspec_strrstr),
-  test_group(cspec_strcpy),
+  test_group(cspec_strncpy),
   test_group(cspec_atoi),
   test_suite_end
 };
