@@ -103,7 +103,10 @@ sources_test="
 # Clang build targets
 if [ "$build_target" = "wasm" ] || [ "$build_target" = "clang" ]; then
 
-  flags_common="-Wall -Wextra -Wno-missing-braces -I ./"
+  flags_common="
+    -Wall -Wextra -Wno-missing-braces
+    -I ./
+  "
 
   flags_debug_opt="-g -O0"
   if [ "$build_type" = "Release" ]; then

@@ -48,14 +48,15 @@ int main(int argc, char* argv[]) {
 
   TestSuite* test_suites[] = {
     &tests_libcs,
-    &tests_cspec_out
-    //&tests_cspec
+    &tests_cspec_out,
+    &tests_cspec
   };
 
   cspec_opt_print_backtrace = cspec_default_print_backtrace;
 
-  cspec_out_fmt("C Version: {}!");
+  cspec_out_fmt("C Version: {}, using deduction level: {}.");
   cspec_out_uint(__STDC_VERSION__);
+  cspec_out_uint(CSPEC_USE_DEDUCTION);
   cspec_out_print();
 
   return cspec_run_all(test_suites);

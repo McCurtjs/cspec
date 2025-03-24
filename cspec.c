@@ -2234,7 +2234,7 @@ int _cspec_run_all(int count, TestSuite* suites[], int argc, char* argv[]) {
 
 __declspec(noinline) void cspec_default_print_backtrace(void) {
 
-#ifdef _MSC_VER
+#ifdef CSPEC_MSVC
   // Make it work with built-in cspec logging
   //test_log("blah!!!!!!!\n");
 

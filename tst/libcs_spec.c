@@ -182,7 +182,7 @@ describe(cspec_streq) {
 
   it("does a basic check") {
     char str2[] = "asdf";
-    expect(str1 != str2);
+    expect((char*)str1 != (char*)str2);
 
     expect(cspec_streq to be_true given(str1, str2));
     expect(cspec_streq to be_true given(str1, str1));
