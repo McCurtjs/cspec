@@ -29,7 +29,7 @@
 *   be an option).
 */
 #ifdef malloc
-# define _CSPEC_USE_MEMORY_TESTING_
+# define CSPEC_USE_MEMORY_TESTING
 # undef malloc
 # undef realloc
 # undef calloc
@@ -37,10 +37,10 @@
 #endif
 
 #ifdef assert
-# define _CSPEC_USE_ASSERT_HANDLING_
+# define CSPEC_USE_ASSERT_HANDLING
 #endif
 
-#ifdef _CSPEC_USE_MEMORY_TESTING_
+#ifdef CSPEC_USE_MEMORY_TESTING
 /* to import real malloc / free / etc. */
 # include <stdlib.h>
 #endif
@@ -49,7 +49,7 @@
 * Check if cspec_assert has been defined at the command line. If it has, enable
 *   assertion handling with longjmp.
 */
-#ifdef _CSPEC_USE_ASSERT_HANDLING_
+#ifdef CSPEC_USE_ASSERT_HANDLING
 # include <setjmp.h>
 # undef assert
 # include <assert.h>
@@ -158,9 +158,9 @@ typedef struct TestContext {
 } Context;
 
 struct TestPass {
-  csUint indent_level;
   csBool expect_fail;
   csBool expect_assert;
+  csUint expect_count;
   csBool skip;
   csBool failed;
   csBool warned;
@@ -174,14 +174,8 @@ static struct TestEnv {
   PrintLevel printed_description;
   csBool printed_filename;
   csBool printed_function;
-  csBool critical;
-  csBool failed;
-  csBool warned;
   csBool in_function;
   csBool in_progress;
-  csBool expect_fail;
-  csBool expect_assert;
-  csBool skip;
   int current_line;
   int count;
   int count_passed;
@@ -189,7 +183,7 @@ static struct TestEnv {
   struct OutputEnv out;
   struct TestContext ctx;
   struct TestPass pass;
-#ifdef _CSPEC_USE_ASSERT_HANDLING_
+#ifdef CSPEC_USE_ASSERT_HANDLING
   jmp_buf jump_buffer;
 #endif
 } test;
@@ -312,6 +306,12 @@ static void _cspec_out_ch(char ch) {
   if (test.out.index < cspec_max_output_size) {
     test.out.buffer[test.out.index++] = ch;
   }
+
+  if (ch == '\n') {
+    for (csUint i = 0; i < test.out.indent; ++i) {
+      _cspec_out_ch(' ');
+    }
+  }
 }
 
 static void _cspec_out_str(const char* s, csSize length) {
@@ -321,41 +321,36 @@ static void _cspec_out_str(const char* s, csSize length) {
 
   for (csSize i = 0; *s && i < length; ++i) {
 
-    switch (*s) {
+    if (*s != '%') {
+      _cspec_out_ch(*s++);
 
-      case '\n': {
-        _cspec_out_ch(*s++);
-        for (csUint j = 0; j < test.out.indent; ++j) {
-          _cspec_out_ch(' ');
-        }
-      } break;
+    } else {
+      switch (s[1]) {
 
-      case '%': {
-        if (s[1] == 'n') {
+        case 'n': {
           if (param.padding) {
             _cspec_out_ch('\n');
           }
-          s += 2; ++i;
-        }
+        } break;
+
 #ifndef __WASM__
-        else if (s[1] == 'c') {
+        case 'c': {
           char color_indicator[] = "\033[_;3_m";
           if (test.out.index + sizeof(color_indicator) < cspec_max_output_size) {
             _cspec_out_str(color_indicator, sizeof(color_indicator) - 1);
           }
-          s += 2; ++i;
-        }
+        } break;
 #endif
-        else {
+        default: {
           _cspec_out_ch(*s++);
+          continue;
         }
-      } break;
 
-      default: {
-        //test.out.buffer[test.out.index++] = *s;
-        _cspec_out_ch(*s++);
-      } break;
+      }
 
+      /* if a special character is consumed, skip it in regular output */
+      s += 2;
+      ++i;
     }
 
   }
@@ -422,7 +417,7 @@ void cspec_out_ch(char ch) {
   _cspec_out_fmt_continue();
 }
 
-void cspec_out_char(char c) {
+void cspec_out_byte(char c) {
   if (!cspec_isprint(c)) c = '.';
   _cspec_out_ch(c);
   _cspec_out_fmt_continue();
@@ -550,7 +545,7 @@ void cspec_out_print(void) {
   Memory Testing
 \*----------------------------------------------------------------------------*/
 
-#ifdef _CSPEC_USE_MEMORY_TESTING_
+#ifdef CSPEC_USE_MEMORY_TESTING
 
 typedef enum MallocFailLevel {
   M_NORMAL,
@@ -609,7 +604,7 @@ static void memory_print_row(const csByte* row, int level, csBool target) {
     if (row + i < _memory + memory_size_full
     && row + i >= _memory
     ) {
-      cspec_out_char(row[i]);
+      cspec_out_byte(row[i]);
     } else {
       cspec_out_ch(' ');
     }
@@ -818,7 +813,8 @@ void* cspec_malloc(csSize size) {
     );
     if (!new_mem_rec) {
       memory_expect_error = FALSE;
-      output("memory error: malloc: ran out of actual memory?");
+      cspec_out_str("memory error: malloc: ran out of actual memory?");
+      cspec_out_print();
       return NULL;
     }
     memory_records = new_mem_rec;
@@ -998,15 +994,15 @@ void cspec_assert(csBool assertion) {
 
   real_assert(test.in_progress);
   if (assertion) return;
-  test.critical = TRUE;
+  test.pass.critical = TRUE;
 
-  if (!test.expect_assert) {
-    test.expect_fail = FALSE;
+  if (!test.pass.expect_assert) {
+    test.pass.expect_fail = FALSE;
     _cspec_error_fn("Assertion failed during test");
     if (cspec_opt_print_backtrace) cspec_opt_print_backtrace();
   }
 
-#ifdef _CSPEC_USE_ASSERT_HANDLING_
+#ifdef CSPEC_USE_ASSERT_HANDLING
   longjmp(test.jump_buffer, 1);
 #else
   test_warn("Assertion was thrown, but handling is disabled.");
@@ -1291,13 +1287,13 @@ void _cspec_warn_fn(int line, const char* message) {
   cspec_out_fmt("line {}:%c {}");
   cspec_out_int(line);
   cspec_out_str(message);
-  if (test.warned) {
+  if (test.pass.warned) {
     _cspec_out_print(CONCOL_Yellow);
   } else {
     _cspec_out_print(CONCOL_bYellow);
-    if (!test.warned) ++test.count_warnings;
+    if (!test.pass.warned) ++test.count_warnings;
   }
-  test.warned = TRUE;
+  test.pass.warned = TRUE;
 }
 
 static int test_error_no_fail(const char* message, csBool is_mem_err) {
@@ -1312,14 +1308,14 @@ static int test_error_no_fail(const char* message, csBool is_mem_err) {
 
 void _cspec_error_fn(const char* message) {
   if (test.in_progress) {
-    if (!test.expect_fail) {
+    if (!test.pass.expect_fail) {
       test_error_no_fail(message, FALSE);
     }
-    test.failed = TRUE;
+    test.pass.failed = TRUE;
   }
 }
 
-#ifdef _CSPEC_USE_MEMORY_TESTING_
+#ifdef CSPEC_USE_MEMORY_TESTING
 
 static int _cspec_error_mem(const char* message, const MemoryRecord* record) {
   int level = 0;
@@ -1396,7 +1392,7 @@ static csBool resolve_param(const char* typ_N, const void* N) {
   ) {
     cspec_out_hex(*(const char*)N);
     cspec_out_str(" ('");
-    cspec_out_char(*(const char*)N);
+    cspec_out_byte(*(const char*)N);
     cspec_out_str("')");
   }
   else if
@@ -1410,7 +1406,7 @@ static csBool resolve_param(const char* typ_N, const void* N) {
     cspec_out_int(n);
     if (cspec_isprint(n)) {
       cspec_out_str(" ('");
-      cspec_out_char((char)n);
+      cspec_out_byte((char)n);
       cspec_out_str("')");
     }
   }
@@ -1502,8 +1498,8 @@ void _cspec_error_typed(
   const char* t_arg9, const void* arg9
 ) {
   if (!test.in_progress) return;
-  test.failed = TRUE;
-  if (test.expect_fail) return;
+  test.pass.failed = TRUE;
+  if (test.pass.expect_fail) return;
 
   int level = print_headers(CONCOL_Red, PRINTED, NULL);
   if (test.out.indent) {
@@ -1564,12 +1560,12 @@ csBool _cspec_begin(int line, const char* desc) {
   * At this point, normally we'rd run the test, but if we have a specific test
   *    number requested, we might still want to skip it.
   */
-  if ((param.line == 0 || param.line == line) && !test.skip) {
+  if ((param.line == 0 || param.line == line) && !test.pass.skip) {
     test.in_progress = TRUE;
 
   } else {
 
-    if (param.verbose == V_VERY || test.skip) {
+    if (param.verbose == V_VERY || test.pass.skip) {
       /* Set test in progress temporarily just so it prints the title in blue */
       test.in_progress = TRUE;
       print_headers(CONCOL_Blue, LOGGED, NULL);
@@ -1586,42 +1582,46 @@ csBool _cspec_end(void) {
     return FALSE;
   }
 
-  if (test.expect_assert && !test.critical) {
-    test.failed = TRUE;
+  if (test.pass.expect_assert && !test.pass.critical) {
+    test.pass.failed = TRUE;
   }
 
-  if (!test.failed && !param.skip_memory_test) {
+  if (!test.pass.failed && !param.skip_memory_test) {
     memory_final_checks();
   }
 
   ++test.count;
 
-  if (!test.failed ^ test.expect_fail
-  &&  !test.critical ^ test.expect_assert
-#ifdef _CSPEC_USE_MEMORY_TESTING_
+  if (!test.pass.failed   ^ test.pass.expect_fail
+  &&  !test.pass.critical ^ test.pass.expect_assert
+#ifdef CSPEC_USE_MEMORY_TESTING
   &&  !memory_error ^ memory_expect_error
 #endif
   ) {
     ++test.count_passed;
 
-    if (param.verbose >= V_RUN || param.line) {
-      csBool failed = test.expect_fail;
-#ifdef _CSPEC_USE_MEMORY_TESTING_
+    if (test.pass.expect_count == 0) {
+      print_headers(CONCOL_Yellow, LOGGED, " (not implemented)");
+      ++test.count_warnings;
+
+    } else if (param.verbose >= V_RUN || param.line) {
+      csBool failed = test.pass.expect_fail;
+#ifdef CSPEC_USE_MEMORY_TESTING
       failed |= memory_expect_error;
 #endif
       const char* failnote = failed ? " (failed successfully)" : NULL;
       print_headers(CONCOL_Green, LOGGED, failnote);
     }
   } else {
-    if (test.expect_fail && !test.failed) {
-      test.expect_fail = FALSE; /* clear this so it prints the error */
+    if (test.pass.expect_fail && !test.pass.failed) {
+      test.pass.expect_fail = FALSE; /* clear this so it prints the error */
       _cspec_error_fn("expected to fail, but succeeded instead");
     }
-    if (test.expect_assert && !test.critical) {
-      test.expect_fail = FALSE;
+    if (test.pass.expect_assert && !test.pass.critical) {
+      test.pass.expect_fail = FALSE;
       _cspec_error_fn("expected an assert failure, but received none");
     }
-#ifdef _CSPEC_USE_MEMORY_TESTING_
+#ifdef CSPEC_USE_MEMORY_TESTING
     if (memory_expect_error) {
       _cspec_error_fn("expected memory errors, but none were found");
     }
@@ -1637,23 +1637,27 @@ csBool _cspec_active(void) {
   return test.in_progress;
 }
 
+void _cspec_expcount(void) {
+  ++test.pass.expect_count;
+}
+
 /*----------------------------------------------------------------------------*\
   Directives
 \*----------------------------------------------------------------------------*/
 
 csBool _cspec_expect_to_fail(void) {
   if(!param.no_expect_fail)
-    test.expect_fail = TRUE;
+    test.pass.expect_fail = TRUE;
   return TRUE;
 }
 
-#ifdef _CSPEC_USE_MEMORY_TESTING_
+#ifdef CSPEC_USE_MEMORY_TESTING
 static csBool memory_directive_warning(void) {
   if (param.skip_memory_test) {
     _cspec_warn_fn(0xFFFFFFFF,
       "warning: expecting memory errors, but memory testing is disabled"
     );
-    test.expect_fail = TRUE;
+    test.pass.expect_fail = TRUE;
     return TRUE;
   }
   return FALSE;
@@ -1661,17 +1665,17 @@ static csBool memory_directive_warning(void) {
 #endif
 
 csBool _cspec_expect_assertion_failure(void) {
-  test.expect_assert = TRUE;
-#ifndef _CSPEC_USE_ASSERT_HANDLING_
+  test.pass.expect_assert = TRUE;
+#ifndef CSPEC_USE_ASSERT_HANDLING
   test_warn("Expected assertion failure, but handling is disabled");
 #endif
   return TRUE;
 }
 
 csBool _cspec_memory_expect_to_fail(void) {
-#ifdef _CSPEC_USE_MEMORY_TESTING_
+#ifdef CSPEC_USE_MEMORY_TESTING
   if (memory_directive_warning()) {
-    test.skip = TRUE;
+    test.pass.skip = TRUE;
     return !test.in_progress;
   } else if(!param.no_expect_fail)
     memory_expect_error = TRUE;
@@ -1683,9 +1687,9 @@ csBool _cspec_memory_expect_to_fail(void) {
 }
 
 csBool _cspec_memory_malloc_null(csBool only_once) {
-#ifdef _CSPEC_USE_MEMORY_TESTING_
+#ifdef CSPEC_USE_MEMORY_TESTING
   if (memory_directive_warning()) {
-    test.skip = TRUE;
+    test.pass.skip = TRUE;
     return !test.in_progress;
   } else
     memory_malloc_fail = only_once ? M_FAIL_ONCE : M_FAIL_ALWAYS;
@@ -1698,9 +1702,9 @@ csBool _cspec_memory_malloc_null(csBool only_once) {
 }
 
 int _cspec_memory_malloc_count(void) {
-#ifdef _CSPEC_USE_MEMORY_TESTING_
+#ifdef CSPEC_USE_MEMORY_TESTING
   if (memory_directive_warning()) {
-    test.skip = TRUE;
+    test.pass.skip = TRUE;
     return -1;
   }
   return memory_count_mallocs;
@@ -1711,9 +1715,9 @@ int _cspec_memory_malloc_count(void) {
 }
 
 int _cspec_memory_free_count(void) {
-#ifdef _CSPEC_USE_MEMORY_TESTING_
+#ifdef CSPEC_USE_MEMORY_TESTING
   if (memory_directive_warning()) {
-    test.skip = TRUE;
+    test.pass.skip = TRUE;
     return -1;
   }
   return memory_count_frees;
@@ -1751,13 +1755,8 @@ static void before_group(const TestGroup* t) {
 
 static void before_pass(void) {
   ctx_stack_index = 0;
-  test.expect_fail = FALSE;
-  test.expect_assert = FALSE;
-  test.skip = FALSE;
   memory_test_reset(!param.skip_memory_test);
-  test.failed = FALSE;
-  test.warned = FALSE;
-  test.critical = FALSE;
+  cspec_memset(&test.pass, 0, sizeof(test.pass));
   test.out.indent = 0;
 }
 
@@ -1770,7 +1769,7 @@ static void _cspec_run_group(const TestGroup* t) {
     prev_line = test.current_line;
 
     test.in_function = TRUE;
-#ifdef _CSPEC_USE_ASSERT_HANDLING_
+#ifdef CSPEC_USE_ASSERT_HANDLING
     if (setjmp(test.jump_buffer) == 0)
 #endif
     t->group_fn();

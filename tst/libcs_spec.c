@@ -35,6 +35,19 @@ describe(cspec_isdigit) {
 
 }
 
+describe(cspec_isprint) {
+
+  it("identifies printable vs non-printable") {
+    expect(cspec_isprint to be_true given('A'));
+    expect(cspec_isprint to be_true given(' '));
+    expect(cspec_isprint to be_true given('~'));
+    expect(cspec_isprint to be_false given(0x1F));
+    expect(cspec_isprint to be_false given(0xFF));
+    expect(cspec_isprint to be_false given(0x7F));
+  }
+
+}
+
 describe(cspec_memset) {
 
   char bytes[20] = { 0 };
@@ -283,6 +296,7 @@ describe(cspec_atoi) {
 
 test_suite(tests_libcs) {
   test_group(cspec_isdigit),
+  test_group(cspec_isprint),
   test_group(cspec_memset),
   test_group(cspec_memeq),
   test_group(cspec_memcpy),

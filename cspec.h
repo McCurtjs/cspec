@@ -907,6 +907,7 @@ void cspec_out_clear(void);
 void cspec_out_fmt(const char* fmt);
 void cspec_out_str(const char* s);
 void cspec_out_ch(char ch);
+void cspec_out_byte(char c);
 void cspec_out_int(long long int);
 void cspec_out_uint(unsigned long long int i);
 void cspec_out_hex(char c);
@@ -1008,6 +1009,7 @@ void cspec_out_print(void);
 void    cspec_print(const char* message);
 csBool  _cspec_begin(int line, const char* desc);
 csBool  _cspec_active(void);
+void    _cspec_expcount(void);
 csBool  _cspec_context_begin(int line, const char* desc);
 csBool  _cspec_context_end(int line);
 void    _cspec_log_fn(int line, const char* messgae);
@@ -1166,7 +1168,7 @@ void    _cspec_error_typed(int line, const char* pfix, const char* fmt,
 #define _expect_type2(S, A, x, B, T, t, ...)        T        _A = (A);    t        _B    = (B);                     if (!(_A x _B))   _test_fail_t(A, x, B, #T, #t)
 #define _expect_type1(S, A, x, B, T, ...)           T        _A = (A);    T        _B    = (B);                     if (!(_A x _B))   _test_fail_t(A, x, B, #T, #T)
 #define _expect_true(S, A, ...)                                                                                     if (!(A))         _test_fail("line "STR(__LINE__)": expected "S)
-#define _expect_va(S, U, V, W, X, Y, Z,_0,_1,_2, F, ...) do { _expect##F(S, U, V, W, X, Y, Z); } while(0)
+#define _expect_va(S, U, V, W, X, Y, Z,_0,_1,_2, F, ...) do { _cspec_expcount(); _expect##F(S, U, V, W, X, Y, Z); } while(0)
 #define _expect(S, ...) _expect_va(S, __VA_ARGS__, _fn_expr, _fn_comp, _fn_true, _comp_all, _type2, _type1, _expr, _comp, _true)
 
 #define _all_comp_part(A, FOREACH, MATCHER, EXPECTED) FOREACH(_iter_all, _loop_all, A) { _test = MATCHER; if (!_test) { _index = _loop_all; _pvalue = _iter_all; EXPECTED break; } } _test ^= _tmp
