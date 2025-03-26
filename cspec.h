@@ -839,8 +839,7 @@ void cspec_assert(csBool assertion);
   Extras
 \*----------------------------------------------------------------------------*/
 
-typedef csUint (*resolve_user_types_fn)
-  (const char** p_type, const void* value, char* out_buffer, csUint out_size);
+typedef csBool (*resolve_user_types_fn)(const char** p_type, const void* value);
 
 typedef void (*print_backtrace_fn)(void);
 
@@ -885,7 +884,8 @@ void cspec_default_print_backtrace(void);
 *   that doesn't have access to the standard library.
 */
 
-csBool  cspec_isdigit(char c);
+csBool  cspec_isdigit(int c);
+csBool  cspec_isprint(int c);
 csBool  cspec_memeq(const void* a, const void* b, csSize n);
 void    cspec_memset(void* dst, csByte c, csSize n);
 void    cspec_memcpy(void* dst, const void* src, csSize n);

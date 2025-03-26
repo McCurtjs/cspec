@@ -198,8 +198,12 @@ static struct TestEnv {
   Useful functions when we don't have a standrad library to rely on
 \*----------------------------------------------------------------------------*/
 
-csBool cspec_isdigit(char c) {
+csBool cspec_isdigit(int c) {
   return '0' <= c && c <= '9';
+}
+
+csBool cspec_isprint(int c) {
+  return c > 0x1F && c < 0x7F;
 }
 
 csBool cspec_memeq(const void* a_, const void* b_, csSize n) {
@@ -304,7 +308,6 @@ int cspec_atoi(const char* s) {
 #define output_size 511
 #define cspec_out_float_precision 10
 
-
 static void _cspec_out_ch(char ch) {
   if (test.out.index < cspec_max_output_size) {
     test.out.buffer[test.out.index++] = ch;
@@ -332,7 +335,7 @@ static void _cspec_out_str(const char* s, csSize length) {
           if (param.padding) {
             _cspec_out_ch('\n');
           }
-          s += 2;
+          s += 2; ++i;
         }
 #ifndef __WASM__
         else if (s[1] == 'c') {
@@ -340,7 +343,7 @@ static void _cspec_out_str(const char* s, csSize length) {
           if (test.out.index + sizeof(color_indicator) < cspec_max_output_size) {
             _cspec_out_str(color_indicator, sizeof(color_indicator) - 1);
           }
-          s += 2;
+          s += 2; ++i;
         }
 #endif
         else {
@@ -356,6 +359,7 @@ static void _cspec_out_str(const char* s, csSize length) {
     }
 
   }
+
 }
 
 static void _cspec_out_fmt_continue(void) {
@@ -415,6 +419,12 @@ void cspec_out_str(const char* s) {
 
 void cspec_out_ch(char ch) {
   _cspec_out_ch(ch);
+  _cspec_out_fmt_continue();
+}
+
+void cspec_out_char(char c) {
+  if (!cspec_isprint(c)) c = '.';
+  _cspec_out_ch(c);
   _cspec_out_fmt_continue();
 }
 
@@ -503,9 +513,9 @@ static void _cspec_out_print(ConsoleColor color) {
   test.out.fmt_lock = 0;
   cspec_out_str(test.out.fmt);
   test.out.fmt = NULL;
-  test.out.buffer[test.out.index] = '\0';
 
 #ifdef __WASM__
+  test.out.buffer[test.out.index] = '\0';
   js_log(test.out.buffer, test.out.index, color);
 #else
   /* find the color specifier if it was added into the string */
@@ -525,6 +535,7 @@ static void _cspec_out_print(ConsoleColor color) {
     ++c;
   }
 
+  test.out.buffer[test.out.index] = '\0';
   puts(test.out.buffer);
 #endif
 
@@ -533,268 +544,6 @@ static void _cspec_out_print(ConsoleColor color) {
 
 void cspec_out_print(void) {
   _cspec_out_print(CONCOL_White);
-}
-
-
-
-
-
-
-
-
-
-
-char output_buffer[output_size + 1];
-static csUint output_index = 0;
-static csUint output_indent = 0;
-static const char* output_fmt = NULL;
-
-static void output_continue_format(void);
-
-static void output_str(const char* s) {
-  if (!s) return;
-  char prev = '\0';
-  while (*s && output_index < output_size) {
-
-    /* handle case for {} format specifiers */
-    if (!output_fmt && *s == '{') {
-      if (prev == '{') {
-        ++s;
-        prev = '\0';
-        continue;
-      } else if (*(s + 1) == '}') {
-        output_fmt = s + 2;
-        output_buffer[output_index] = '\0';
-        return;
-      }
-    }
-
-    if (*s == '\n') {
-      output_buffer[output_index++] = *(s++);
-      for (csUint i = 0; i < output_indent && output_index < output_size; ++i) {
-        output_buffer[output_index++] = ' ';
-      }
-      prev = ' ';
-      continue;
-    }
-
-    if (*s == '%') {
-      if (*(s + 1) == 'n') {
-        if (param.padding) {
-          output_buffer[output_index++] = '\n';
-        }
-        prev = ' ';
-        s += 2;
-        continue;
-      }
-
-#ifndef __WASM__
-      /* insert Unix - style color indicators for% c if we're not in WASM */
-      else if (*(s + 1) == 'c') {
-        char color_indicator[] = "\033[_;3_m";
-        if (output_index < output_size - sizeof(color_indicator)) {
-          for (csUint i = 0; i < sizeof(color_indicator) - 1; ++i) {
-            output_buffer[output_index++] = color_indicator[i];
-          }
-          s += 2;
-          continue;
-        }
-      }
-#endif
-    }
-
-    prev = *(s++);
-    output_buffer[output_index++] = prev;
-  }
-  output_continue_format();
-}
-
-static void output_str_quotes(const char* s, char q) {
-  if (output_index >= output_size - 2) return;
-  output_buffer[output_index++] = q;
-  while (s && *s) {
-    if (output_index >= output_size - 1) break;
-    output_buffer[output_index++] = *s++;
-  }
-  output_buffer[output_index++] = q;
-  output_continue_format();
-}
-
-static void output_continue_format(void) {
-  if (output_fmt) {
-    const char* tmp = output_fmt;
-    output_fmt = NULL;
-    output_str(tmp);
-  }
-  output_buffer[output_index] = '\0';
-}
-
-static csBool output_char_no_fmt(char c) {
-  if (output_index >= output_size) return FALSE;
-  if (c <= 0x1F || c == 0x7F) c = '.';
-  output_buffer[output_index++] = c;
-  return TRUE;
-}
-
-static void output_char(char c) {
-  if (!output_char_no_fmt(c)) return;
-  output_continue_format();
-}
-
-static void output_hex(char c) {
-  if (output_index >= output_size - 1) return;
-  unsigned char h = ((unsigned char)c) % 16;
-  h += h >= 10 ? 'A'-10 : '0';
-  output_buffer[output_index + 1] = h;
-  h = ((unsigned char)c) / 16;
-  h += h >= 10 ? 'A'-10 : '0';
-  output_buffer[output_index] = h;
-  output_index += 2;
-  output_continue_format();
-}
-
-static void output_pad(csUint until_pos, char c) {
-  if (until_pos > output_size) until_pos = output_size;
-  while (output_index < until_pos) {
-    output_buffer[output_index++] = c;
-  }
-  output_continue_format();
-}
-
-static void _output_uint_ignore_format(unsigned long long int i) {
-  if (output_index >= output_size) return;
-  if (i == 0) {
-    output_buffer[output_index++] = '0';
-    return;
-  }
-  csUint start = output_index;
-  while (i && output_index < output_size) {
-    output_buffer[output_index++] = '0' + (i % 10);
-    i /= 10;
-  }
-  /* the above prints it backwards, so flip it */
-  csUint end = output_index - 1;
-  while (start < end) {
-    char temp = output_buffer[start];
-    output_buffer[start++] = output_buffer[end];
-    output_buffer[end--] = temp;
-  }
-  /* caller is expected to null-terminate */
-}
-
-static void output_ptr(const void* ptr) {
-  if (output_index >= output_size - 10) return;
-  long long unsigned int p = (long long unsigned int)ptr;
-  char* begin = output_buffer + output_index;
-  begin[0] = '0';
-  begin[1] = 'x';
-  for (int i = 10; i-- > 2;) {
-    char d = p % 16;
-    d += d >= 10 ? 'A'-10 : '0';
-    begin[i] = d;
-    p /= 16;
-  }
-  output_index += 10;
-  output_continue_format();
-}
-
-static void output_uint(unsigned long long int i) {
-  _output_uint_ignore_format(i);
-  output_continue_format();
-}
-
-static void output_sint(long long int i) {
-  if (i < 0) {
-    output_buffer[output_index++] = '-';
-    i *= -1;
-  }
-  output_uint((unsigned long long int)i);
-}
-
-static void output_float_p(double f, int precision) {
-  if (f < 0.0) {
-    output_buffer[output_index++] = '-';
-    f *= -1.0;
-  }
-  unsigned long long int integer_part = (unsigned long long int)f;
-  _output_uint_ignore_format(integer_part);
-  f -= integer_part;
-  if (f != 0.0) {
-    output_buffer[output_index++] = '.';
-    for (int i = precision; i && f >= 0.00000000001; --i) {
-      f *= 10.0;
-      integer_part = (unsigned long long int)f;
-      output_buffer[output_index++] = '0' + (char)integer_part;
-      f -= integer_part;
-    }
-  }
-  output_continue_format();
-}
-
-static void output_float(double f) {
-  output_float_p(f, cspec_out_float_precision);
-}
-
-static void output_bool(csBool b) {
-  output_str(b ? "true" : "false");
-}
-
-static void output_reset(void) {
-  output_index = 0;
-  output_buffer[0] = '\0';
-  output_fmt = NULL;
-}
-
-static void output(const char* s) {
-#ifdef __WASM__
-  js_log(output_buffer, cspec_strlen(s), -1);
-#else
-  puts(s);
-#endif
-}
-
-static void output_print(void) {
-  if (output_fmt) output_str(output_fmt);
-
-#ifdef __WASM__
-  js_log(output_buffer, output_index, -1);
-#else
-  puts(output_buffer);
-#endif
-
-  output_reset();
-}
-
-static void output_print_color(ConsoleColor color) {
-  /* flush any remaining format string */
-  if (output_fmt) output_str(output_fmt);
-
-#ifndef __WASM__
-  /* find the color specifier if it was added into the string */
-  for (csUint i = 0; i < output_index; ++i) {
-    if (output_buffer[i] == '\033') {
-      /* set boldness flag */
-      output_buffer[i + 2] = color >= 40 ? '1' : '0';
-
-      /* fill out the color code being requested */
-      output_buffer[i + 5] = '0' + color % 10;
-
-      /* cap the string with a closing color specifier */
-      output_str("\033[0m");
-
-      break;
-    }
-  }
-#endif
-
-  // finally print the string
-#ifdef __WASM__
-  js_log(output_buffer, output_index, color);
-#else
-  puts(output_buffer);
-#endif
-
-  output_reset();
 }
 
 /*----------------------------------------------------------------------------*\
@@ -841,30 +590,31 @@ static int memory_malloc_forced_failures = 0;
 #define memory_records_grow_factor 1.5f
 
 static void memory_print_row(const csByte* row, int level, csBool target) {
-  output_pad(param.tabsize * level, ' ');
-  output_ptr(row);
-  if (target) output_str("-> "); else output_str(":  ");
+  cspec_out_clear();
+  cspec_out_pad(param.tabsize * level, ' ');
+  cspec_out_ptr(row);
+  cspec_out_str(target ? "-> " : ":  ");
   for (int i = 0; i < 16; ++i) {
     if (row + i < _memory + memory_size_full
     &&  row + i >= _memory
     ) {
-      output_hex(row[i]);
-      output_str(" ");
+      cspec_out_hex(row[i]);
+      cspec_out_ch(' ');
     } else {
-      output_str("xx ");
+      cspec_out_str("xx ");
     }
   }
-  if (target) output_str("= "); else output_str("- ");
+  cspec_out_str(target ? "= " : "- ");
   for (int i = 0; i < 16; ++i) {
     if (row + i < _memory + memory_size_full
     && row + i >= _memory
     ) {
-      output_char(row[i]);
+      cspec_out_char(row[i]);
     } else {
-      output_char(' ');
+      cspec_out_ch(' ');
     }
   }
-  output_print();
+  cspec_out_print();
 }
 
 static void memory_print_record(const MemoryRecord* record, int level) {
@@ -873,7 +623,7 @@ static void memory_print_record(const MemoryRecord* record, int level) {
     memory_print_row(record->block + i - 16 + memory_size_fence, level, i == 16);
     i += 16;
   }
-  if (param.padding) output_print();
+  if (param.padding) cspec_out_print();
 }
 
 static csBool memory_check_fence(MemoryRecord* record) {
@@ -918,7 +668,7 @@ void _cspec_memory_log_block(int line, const void* ptr) {
 
   int level = print_headers(CONCOL_bWhite, LOGGED, NULL);
 
-  if (param.padding) output_print();
+  if (param.padding) cspec_out_print();
 
   if (record) {
     memory_print_record(record, level);
@@ -999,11 +749,11 @@ static void memory_final_checks(void) {
     int level = _cspec_error_mem("after: mismatched malloc/free calls", NULL);
     if (test.in_progress) {
       if (!memory_expect_error) {
-        output_pad(param.tabsize * level + 21, ' ');
-        output_str("mallocs: {}, frees: {}%n");
-        output_sint(memory_count_mallocs);
-        output_sint(memory_count_frees);
-        output_print();
+        cspec_out_pad(param.tabsize * level + 21, ' ');
+        cspec_out_fmt("mallocs: {}, frees: {}%n");
+        cspec_out_int(memory_count_mallocs);
+        cspec_out_int(memory_count_frees);
+        cspec_out_print();
       }
     }
   }
@@ -1467,17 +1217,17 @@ static int print_headers(
 ) {
 
   if (!test.printed_filename) {
-    output_str(test.suite->header);
-    output_print_color(CONCOL_bPurple);
+    cspec_out_str(test.suite->header);
+    _cspec_out_print(CONCOL_Purple);
     test.printed_filename = TRUE;
   }
 
   if (!test.printed_function) {
-    output_pad(param.tabsize, ' ');
-    output_str("in function ({}):%c test_");
-    output_sint(*test.function->line);
-    output_str(test.function->header);
-    output_print_color(CONCOL_bCyan);
+    cspec_out_pad(param.tabsize, ' ');
+    cspec_out_fmt("in function ({}):%c test_{}");
+    cspec_out_int(*test.function->line);
+    cspec_out_str(test.function->header);
+    _cspec_out_print(CONCOL_bCyan);
     test.printed_function = TRUE;
   }
 
@@ -1486,26 +1236,26 @@ static int print_headers(
   for (int i = 1; i <= ctx_stack_top; ++i) {
     ctx = &ctx_stack[i];
     if (!ctx->printed) {
-      output_pad(param.tabsize * level, ' ');
-      output_str(ctx->desc);
-      output_print_color(CONCOL_Cyan);
+      cspec_out_pad(param.tabsize * level, ' ');
+      cspec_out_str(ctx->desc);
+      _cspec_out_print(CONCOL_Cyan);
       ctx->printed = TRUE;
     }
     ++level;
   }
 
   if (test.printed_description < desc_level) {
-    output_pad(param.tabsize * level, ' ');
+    cspec_out_pad(param.tabsize * level, ' ');
 
     if (!test.in_progress) {
-      output_str("pre-test");
-      output_print();
+      cspec_out_str("pre-test");
+      cspec_out_print();
       test.printed_description = PRINTED;
 
     } else {
-      output_str(test.description);
-      output_str(to_append ? to_append : NULL); /* may be null */
-      output_print_color(desc_color);
+      cspec_out_str(test.description);
+      cspec_out_str(to_append); /* may be null */
+      _cspec_out_print(desc_color);
       test.printed_description = desc_level;
     }
   }
@@ -1514,8 +1264,8 @@ static int print_headers(
 }
 
 void cspec_print(const char* message) {
-  output_str("{}\n");
-  output_str(message);
+  cspec_out_str(message);
+  cspec_out_print();
 }
 
 void _cspec_log_fn(int line, const char* message) {
@@ -1525,11 +1275,11 @@ void _cspec_log_fn(int line, const char* message) {
     return;
   }
   int level = print_headers(CONCOL_bWhite, LOGGED, NULL);
-  output_pad(param.tabsize * level, ' ');
-  output_str("line {}: ");
-  output_sint(line);
-  output_str(message);
-  output_print();
+  cspec_out_pad(param.tabsize * level, ' ');
+  cspec_out_fmt("line {}:%c {}");
+  cspec_out_int(line);
+  cspec_out_str(message);
+  cspec_out_print();
 }
 
 void _cspec_warn_fn(int line, const char* message) {
@@ -1537,14 +1287,14 @@ void _cspec_warn_fn(int line, const char* message) {
     return;
   }
   int level = print_headers(CONCOL_Yellow, LOGGED, NULL);
-  output_pad(param.tabsize * level, ' ');
-  output_str("line {}:%c ");
-  output_sint(line);
-  output_str(message);
+  cspec_out_pad(param.tabsize * level, ' ');
+  cspec_out_fmt("line {}:%c {}");
+  cspec_out_int(line);
+  cspec_out_str(message);
   if (test.warned) {
-    output_print_color(CONCOL_Yellow);
+    _cspec_out_print(CONCOL_Yellow);
   } else {
-    output_print_color(CONCOL_bYellow);
+    _cspec_out_print(CONCOL_bYellow);
     if (!test.warned) ++test.count_warnings;
   }
   test.warned = TRUE;
@@ -1552,11 +1302,11 @@ void _cspec_warn_fn(int line, const char* message) {
 
 static int test_error_no_fail(const char* message, csBool is_mem_err) {
   int level = print_headers(CONCOL_Red, PRINTED, NULL);
-  output_pad(param.tabsize * level, ' ');
-  if (is_mem_err) output_str("memory error: ");
-  output_str(message);
-  output_print();
-  if (param.padding) output_print();
+  cspec_out_pad(param.tabsize * level, ' ');
+  if (is_mem_err) cspec_out_str("memory error: ");
+  cspec_out_str(message);
+  cspec_out_print();
+  if (param.padding) cspec_out_print();
   return level;
 }
 
@@ -1593,25 +1343,32 @@ static int _cspec_error_mem(const char* message, const MemoryRecord* record) {
 
 static csBool resolve_param(const char* typ_N, const void* N) {
 
+  if (!typ_N) {
+    return FALSE;
+  }
+
   if (!N) {
-    output_str("<NULL>");
+    cspec_out_str("<NULL>");
     return FALSE;
   }
 
   if (resolve_user_types) {
-    csUint written = resolve_user_types(&typ_N, N,
-      output_buffer + output_index, output_size - output_index
-    );
+    const char* old_fmt = test.out.fmt;
+    test.out.fmt = NULL;
+    csBool written = resolve_user_types(&typ_N, N);
+    test.out.fmt = old_fmt;
 
     if (written) {
-      output_index += written;
-      output_continue_format();
-      return TRUE;
+      _cspec_out_fmt_continue();
     }
+
+    return written != 0;
   }
 
   csBool is_size_t = cspec_streq(typ_N, "size_t")
                   || cspec_streq(typ_N, "csSize");
+
+  cspec_out_fmt_begin();
 
   if (cspec_strrstr(typ_N, "char*")
   ||  cspec_strrstr(typ_N, "byte*")
@@ -1619,59 +1376,50 @@ static csBool resolve_param(const char* typ_N, const void* N) {
   ||  cspec_strrstr(typ_N, "unsigned char*")
   ||  cspec_strrstr(typ_N, "char[]")
   ) {
-    output_str_quotes(*(const char**)N, '"');
+    cspec_out_ch('"');
+    cspec_out_str(*(const char**)N);
+    cspec_out_ch('"');
   }
   else if (cspec_strrstr(typ_N, "*")
   ||  cspec_strrstr(typ_N, "_ptr")
   ) {
-    output_ptr(*(const void**)N);
+    cspec_out_ptr(*(const void**)N);
   }
   else if (cspec_strrstr(typ_N, "[]")) {
-    output_ptr(N);
+    cspec_out_ptr(N);
 
   } else if
   (  cspec_streq(typ_N, "char")
   || cspec_streq(typ_N, "unsigned char")
-  ) {
-    const char* tmp = output_fmt;
-    output_fmt = NULL;
-    output_char('\'');
-    output_char(*(const char*)N);
-    output_char('\'');
-    output_fmt = tmp;
-    output_continue_format();
-  }
-  else if
-  (  cspec_streq(typ_N, "byte")
+  || cspec_streq(typ_N, "byte")
   || cspec_streq(typ_N, "csByte")
   ) {
-    output_hex(*(const char*)N);
+    cspec_out_hex(*(const char*)N);
+    cspec_out_str(" ('");
+    cspec_out_char(*(const char*)N);
+    cspec_out_str("')");
   }
   else if
   (  cspec_streq(typ_N, "short")
   || cspec_streq(typ_N, "short int")
   ) {
-    output_sint(*(const short int*)N);
+    cspec_out_int(*(const short int*)N);
   }
   else if (cspec_streq(typ_N, "int")) {
     int n = *(const int*)N;
-    output_sint(n);
-    /*
-    if (n >= 0 && n < 256) {
-      output_char_no_fmt(' ');
-      output_char_no_fmt('(');
-      output_char_no_fmt('\'');
-      output_char_no_fmt((char)n);
-      output_char_no_fmt('\'');
-      output_char_no_fmt(')');
-    }*/
+    cspec_out_int(n);
+    if (cspec_isprint(n)) {
+      cspec_out_str(" ('");
+      cspec_out_char((char)n);
+      cspec_out_str("')");
+    }
   }
   else if
   (  cspec_streq(typ_N, "long")
   || cspec_streq(typ_N, "long int")
   || (is_size_t && sizeof(void*) == 4)
   ) {
-    output_sint(*(const long int*)N);
+    cspec_out_int(*(const long int*)N);
   }
   else if
   (  cspec_streq(typ_N, "llong")
@@ -1679,14 +1427,14 @@ static csBool resolve_param(const char* typ_N, const void* N) {
   || cspec_streq(typ_N, "long long int")
   || (is_size_t && sizeof(void*) == 8)
   ) {
-    output_sint(*(const long long int*)N);
+    cspec_out_int(*(const long long int*)N);
   }
   else if
   (  cspec_streq(typ_N, "ushort")
   || cspec_streq(typ_N, "unsigned short")
   || cspec_streq(typ_N, "unsigned short int")
   ) {
-    output_uint(*(const unsigned short*)N);
+    cspec_out_uint(*(const unsigned short*)N);
   }
   else if
   (  cspec_streq(typ_N, "uint")
@@ -1694,39 +1442,48 @@ static csBool resolve_param(const char* typ_N, const void* N) {
   || cspec_streq(typ_N, "unsigned")
   || cspec_streq(typ_N, "unsigned int")
   ) {
-    output_uint(*(const unsigned int*)N);
+    cspec_out_uint(*(const unsigned int*)N);
   }
   else if
   (  cspec_streq(typ_N, "ulong")
   || cspec_streq(typ_N, "unsigned long")
   || cspec_streq(typ_N, "unsigned long int")
   ) {
-    output_uint(*(const unsigned long int*)N);
+    cspec_out_uint(*(const unsigned long int*)N);
   }
   else if
   (  cspec_streq(typ_N, "ullong")
   || cspec_streq(typ_N, "unsigned long long")
   || cspec_streq(typ_N, "unsigned long long int")
   ) {
-    output_uint(*(const unsigned long long int*)N);
+    cspec_out_uint(*(const unsigned long long int*)N);
   }
   else if (cspec_streq(typ_N, "float")) {
-    output_float(*(const float*)N);
+    cspec_out_float(*(const float*)N);
   }
   else if (cspec_streq(typ_N, "double")) {
-    output_float(*(const double*)N);
+    cspec_out_float(*(const double*)N);
   }
   else if
   (  cspec_streq(typ_N, "bool")
   || cspec_streq(typ_N, "_Bool")
   || cspec_streq(typ_N, "csBool")
   ) {
-    output_bool(*(csBool*)N);
+    cspec_out_bool(*(csBool*)N);
   }
   else {
-    output_str("<unknown_type>");
+    cspec_out_str("<unknown_type>");
+    cspec_out_fmt_end();
     return FALSE;
   }
+
+  if (param.show_types) {
+    cspec_out_str(" [ ");
+    cspec_out_str(typ_N);
+    cspec_out_str(" ]");
+  }
+
+  cspec_out_fmt_end();
 
   return TRUE;
 }
@@ -1749,21 +1506,20 @@ void _cspec_error_typed(
   if (test.expect_fail) return;
 
   int level = print_headers(CONCOL_Red, PRINTED, NULL);
-  if (output_indent) {
-    output_pad(output_indent, ' ');
+  if (test.out.indent) {
+    cspec_out_pad(test.out.indent, ' ');
   }
   else {
-    output_pad(param.tabsize * level, ' ');
-    output_str("line {}: ");
-    output_sint(line);
-    output_indent = output_index;
+    cspec_out_pad(param.tabsize * level, ' ');
+    cspec_out_fmt("line {}: ");
+    cspec_out_int(line);
+    test.out.indent = test.out.index;
   }
-  output_str("{}");
-  output_str(pre);
+  cspec_out_str(pre);
 
   if (!fmt) goto finish;
 
-  output_str(fmt);
+  cspec_out_fmt(fmt);
 
   if (t_arg0) resolve_param(t_arg0, arg0);
   if (t_arg1) resolve_param(t_arg1, arg1);
@@ -1776,30 +1532,12 @@ void _cspec_error_typed(
   if (t_arg8) resolve_param(t_arg8, arg8);
   if (t_arg9) resolve_param(t_arg9, arg9);
 
-  if (!param.show_types) goto finish;
-
-  /* Follows the line printing the given types for debugging, ie. : (int, int) */
-  output_str(" : ( ");
-
-  if (t_arg0) output_str(t_arg0);
-  if (t_arg1) { output_str(", "); output_str(t_arg1); }
-  if (t_arg2) { output_str(", "); output_str(t_arg2); }
-  if (t_arg3) { output_str(", "); output_str(t_arg3); }
-  if (t_arg4) { output_str(", "); output_str(t_arg4); }
-  if (t_arg5) { output_str(", "); output_str(t_arg5); }
-  if (t_arg6) { output_str(", "); output_str(t_arg6); }
-  if (t_arg7) { output_str(", "); output_str(t_arg7); }
-  if (t_arg8) { output_str(", "); output_str(t_arg8); }
-  if (t_arg9) { output_str(", "); output_str(t_arg9); }
-
-  output_str(" )");
-
 finish:
 
-  output_print();
+  cspec_out_print();
 
   /* print empty line for padding */
-  if (param.padding) output_print();
+  if (param.padding) cspec_out_print();
 }
 
 /*----------------------------------------------------------------------------*\
@@ -2020,7 +1758,7 @@ static void before_pass(void) {
   test.failed = FALSE;
   test.warned = FALSE;
   test.critical = FALSE;
-  output_indent = 0;
+  test.out.indent = 0;
 }
 
 static void _cspec_run_group(const TestGroup* t) {
@@ -2051,9 +1789,9 @@ void _cspec_run_suite(const TestSuite* suite) {
 
   if (!cspec_strrstr(suite->filename, param.file)) {
     if (param.verbose == V_VERY) {
-      output_str("skipping file: %c");
-      output_str(suite->filename);
-      output_print_color(CONCOL_Purple);
+      cspec_out_str("skipping file: %c");
+      cspec_out_str(suite->filename);
+      _cspec_out_print(CONCOL_Purple);
     }
     return;
   }
@@ -2101,7 +1839,7 @@ static csBool process_args(int argc, char* argv[]) {
       }
 
       if (cspec_streq(arg, "-h") || cspec_streq(arg, "--help")) {
-        output(
+        cspec_out_str(
           ": Usage: tests [OPTIONS]"
           "\n:      : tests filename [OPTIONS]"
           "\n:      : tests filename:line [OPTIONS]"
@@ -2121,6 +1859,7 @@ static csBool process_args(int argc, char* argv[]) {
           "\n: m ignore-memory                   : disables memory testing"
           "\n: s show-types                      : prints deduced types in error output"
         );
+        cspec_out_print();
         return TRUE;
 
       } else if (cspec_streq(arg, "--verbose")) {
@@ -2150,7 +1889,8 @@ static csBool process_args(int argc, char* argv[]) {
           int as_i = cspec_atoi(input);
           param.tabsize = as_i > 0 ? as_i : 0;
         } else {
-          output("--tab-size requires a number as an argument");
+          cspec_out_str("--tab-size requires a number as an argument");
+          cspec_out_print();
           return TRUE;
         }
       }
@@ -2201,19 +1941,21 @@ int _cspec_run_all(int count, TestSuite* suites[], int argc, char* argv[]) {
 
   if (test.count) {
     ConsoleColor color = (test.count == test.count_passed) ? CONCOL_bGreen : CONCOL_bRed;
-    output_str("Tests passed:%c {} out of {}, or {}%");
-    output_sint(test.count_passed);
-    output_sint(test.count);
-    output_sint((int)(100.f * (float)test.count_passed / (float)test.count));
+
+    cspec_out_fmt("Tests passed:%c {} out of {}, or {}%");
+    cspec_out_int(test.count_passed);
+    cspec_out_int(test.count);
+    cspec_out_int((int)(100.f * (float)test.count_passed / (float)test.count));
+
     if (test.count_warnings) {
-      output_str(" - warnings: ");
-      output_sint(test.count_warnings);
+      cspec_out_fmt(" - warnings: {}");
+      cspec_out_int(test.count_warnings);
       if (color == CONCOL_bGreen) color = CONCOL_bYellow;
     }
-    output_print_color(color);
+    _cspec_out_print(color);
   } else {
-    output_str("Tests passed:%c 0 out of 0");
-    output_print_color(CONCOL_bYellow);
+    cspec_out_str("Tests passed:%c 0 out of 0");
+    _cspec_out_print(CONCOL_bYellow);
   }
 
   /* return the number of failed tests */
