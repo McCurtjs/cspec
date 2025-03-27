@@ -28,21 +28,8 @@
 *   custom allocators without having to globally define malloc (which will still
 *   be an option).
 */
-#ifdef malloc
-# define CSPEC_USE_MEMORY_TESTING
-# undef malloc
-# undef realloc
-# undef calloc
-# undef free
-#endif
-
 #ifdef assert
 # define CSPEC_USE_ASSERT_HANDLING
-#endif
-
-#ifdef CSPEC_USE_MEMORY_TESTING
-/* to import real malloc / free / etc. */
-# include <stdlib.h>
 #endif
 
 /*
@@ -128,6 +115,13 @@ typedef enum Status {
   S_ASSERTS
 } Status;
 
+typedef enum MallocFailLevel {
+  M_NORMAL,
+  M_WAS_EXPECTED,
+  M_FAIL_ONCE,
+  M_FAIL_ALWAYS
+} MallocFailLevel;
+
 static struct InputParams {
   int tabsize;              /* -t [n] */
   const char* file;         /* filename */
@@ -145,7 +139,7 @@ static struct InputParams {
 struct OutputEnv {
   char buffer[cspec_max_output_size + 1];
   csUint index;
-  csUint indent; // probably not needed (use ctx.level instead?)
+  csUint indent; /* Extra indent for printing alignment on newlines */
   const char* fmt;
   int fmt_lock;
   ConsoleColor color;
@@ -158,13 +152,38 @@ typedef struct TestContext {
 } Context;
 
 struct TestPass {
+  MallocFailLevel force_malloc_null;
+  MallocFailLevel force_realloc_move;
+  csUint count_expected_malloc_fails;
+  csUint count_mallocs;
+  csUint count_frees;
+  csUint count_expects;
   csBool expect_fail;
   csBool expect_assert;
-  csUint expect_count;
+  csBool expect_memory_error;
   csBool skip;
   csBool failed;
   csBool warned;
   csBool critical;
+  csBool memory_error;
+};
+
+#define memory_size_barrier 32
+#define memory_size_fence 7
+#define cspec_mem_size (cspec_max_memory_pool_size + memory_size_barrier*2)
+#define memory_size_full cspec_mem_size
+
+typedef struct MemoryRecord {
+  csSize size;
+  csByte* block;
+  csByte* ptr;
+  csBool is_free;
+} MemoryRecord;
+
+struct TestMemory {
+  csSize ptr;
+  MemoryRecord records[cspec_max_memory_allocs];
+  csByte buffer[cspec_mem_size];
 };
 
 static struct TestEnv {
@@ -180,12 +199,13 @@ static struct TestEnv {
   int count;
   int count_passed;
   int count_warnings;
-  struct OutputEnv out;
-  struct TestContext ctx;
   struct TestPass pass;
 #ifdef CSPEC_USE_ASSERT_HANDLING
   jmp_buf jump_buffer;
 #endif
+  struct TestContext ctx;
+  struct OutputEnv out;
+  struct TestMemory mem;
 } test;
 
 /*----------------------------------------------------------------------------*\
@@ -545,44 +565,9 @@ void cspec_out_print(void) {
   Memory Testing
 \*----------------------------------------------------------------------------*/
 
-#ifdef CSPEC_USE_MEMORY_TESTING
-
-typedef enum MallocFailLevel {
-  M_NORMAL,
-  M_WAS_EXPECTED,
-  M_FAIL_ONCE,
-  M_FAIL_ALWAYS
-} MallocFailLevel;
-
-#define memory_size_fence 7
-#define memory_size_barrier 16
-#define memory_size_full memory_size_max + memory_size_barrier*2
 /* #define memory_size_max 4096 // defined in header for customizability */
 
-typedef struct MemoryRecord {
-  csSize size;
-  csByte* block;
-  csBool is_free;
-} MemoryRecord;
-
 static int _cspec_error_mem(const char* message, const MemoryRecord* record);
-
-static csByte _memory[memory_size_full];
-static csByte* memory = _memory + memory_size_barrier;
-static csSize memory_ptr;
-
-/* Not using dynamic array here because, of course, it uses malloc! */
-static MemoryRecord* memory_records = NULL;
-static csSize memory_records_capacity;
-static csSize memory_records_size;
-static int memory_count_mallocs = 0;
-static int memory_count_frees = 0;
-static csBool memory_expect_error = FALSE;
-static csBool memory_error = FALSE;
-static MallocFailLevel memory_malloc_fail = M_NORMAL;
-static int memory_malloc_forced_failures = 0;
-//static int memory_realloc_force_move = FALSE;
-#define memory_records_grow_factor 1.5f
 
 static void memory_print_row(const csByte* row, int level, csBool target) {
   cspec_out_clear();
@@ -590,8 +575,8 @@ static void memory_print_row(const csByte* row, int level, csBool target) {
   cspec_out_ptr(row);
   cspec_out_str(target ? "-> " : ":  ");
   for (int i = 0; i < 16; ++i) {
-    if (row + i < _memory + memory_size_full
-    &&  row + i >= _memory
+    if (row + i < test.out.buffer + cspec_mem_size
+    &&  row + i >= test.out.buffer
     ) {
       cspec_out_hex(row[i]);
       cspec_out_ch(' ');
@@ -601,8 +586,8 @@ static void memory_print_row(const csByte* row, int level, csBool target) {
   }
   cspec_out_str(target ? "= " : "- ");
   for (int i = 0; i < 16; ++i) {
-    if (row + i < _memory + memory_size_full
-    && row + i >= _memory
+    if (row + i < test.out.buffer + cspec_mem_size
+    && row + i >= test.out.buffer
     ) {
       cspec_out_byte(row[i]);
     } else {
@@ -615,7 +600,7 @@ static void memory_print_row(const csByte* row, int level, csBool target) {
 static void memory_print_record(const MemoryRecord* record, int level) {
   csSize i = 0;
   while (i < record->size + memory_size_fence + 16) {
-    memory_print_row(record->block + i - 16 + memory_size_fence, level, i == 16);
+    memory_print_row(record->ptr + i - 16, level, i == 16);
     i += 16;
   }
   if (param.padding) cspec_out_print();
@@ -623,8 +608,8 @@ static void memory_print_record(const MemoryRecord* record, int level) {
 
 static csBool memory_check_fence(MemoryRecord* record) {
   for (csSize i = 0; i < memory_size_fence; ++i) {
-    if ('b' != *(record->block + i)
-    ||  'e' != *(record->block + i + memory_size_fence + record->size)
+    if ('b' != record->block[i]
+    ||  'e' != record->block[i + memory_size_fence + record->size]
     ) {
       return FALSE;
     }
@@ -632,14 +617,14 @@ static csBool memory_check_fence(MemoryRecord* record) {
   return TRUE;
 }
 
-static int memory_record_compare(const void* key_, const void* dat) {
-  const MemoryRecord* record = dat;
-  const csByte* key = key_;
-  const csByte* record_block = record->block + memory_size_fence;
-
-  if (key > record_block) return 1;
-  if (key < record_block) return -1;
-  return 0;
+static MemoryRecord* memory_record_from_ptr(const void* ptr) {
+  for (csUint i = 0; i < test.pass.count_mallocs; ++i) {
+    MemoryRecord* rec = &test.mem.records[i];
+    if (rec->ptr == ptr) {
+      return rec;
+    }
+  }
+  return NULL;
 }
 
 static int print_headers(
@@ -652,14 +637,8 @@ void _cspec_memory_log_block(int line, const void* ptr) {
     return;
   }
 
-  const csByte* bytes = ptr;
-
   /* check if the pointer is in our allocated blocks list */
-  MemoryRecord* record = bsearch(
-    bytes, memory_records,
-    memory_records_size, sizeof(MemoryRecord),
-    memory_record_compare
-  );
+  MemoryRecord* record = memory_record_from_ptr(ptr);
 
   int level = print_headers(CONCOL_bWhite, LOGGED, NULL);
 
@@ -668,56 +647,66 @@ void _cspec_memory_log_block(int line, const void* ptr) {
   if (record) {
     memory_print_record(record, level);
   } else {
+    const csByte* bytes = ptr;
     memory_print_row(bytes - 16, level, FALSE);
     memory_print_row(bytes, level, TRUE);
     memory_print_row(bytes + 16, level, FALSE);
   }
 }
 
-static void memory_test_reset(csBool enable) {
-  if (!enable) {
-    free(memory_records);
-    memory_records = NULL;
+static csBool memory_test_unused() {
+  return test.pass.count_mallocs == 0
+      && test.pass.count_frees == 0
+      && test.pass.force_malloc_null == M_NORMAL
+      && test.pass.force_realloc_move == M_NORMAL
+      && test.pass.expect_memory_error == FALSE;
+}
 
-  } else {
-    memory_expect_error = FALSE;
-    memory_malloc_forced_failures = 0;
-    memory_malloc_fail = M_NORMAL;
-    memory_error = FALSE;
-    memory_count_mallocs = 0;
-    memory_count_frees = 0;
-    memory_records_size = 0;
-    memory_ptr = 0;
-
-    /* Do a simple reset if we already have the records allocated */
-    if (!memory_records) {
-      memory_records_size = 0;
-      memory_records_capacity = 16;
-      memory_records = malloc(memory_records_capacity * sizeof(MemoryRecord));
-    }
-
-    cspec_memset(_memory, 0xFF, memory_size_barrier);
-    cspec_memset(memory, 'X', memory_size_max);
-    cspec_memset(
-      _memory + memory_size_barrier + memory_size_max,
-      0xFF, memory_size_barrier
-    );
+static void memory_test_reset(csBool force) {
+  /* We can usually skip the reset if memory testing wasn't being used */
+  if (force == FALSE && memory_test_unused()) {
+    return;
   }
+
+  test.mem.ptr = memory_size_barrier;
+  csByte* arena_start = test.mem.buffer + memory_size_barrier;
+  csByte* end_barrier = arena_start + cspec_max_memory_pool_size;
+  cspec_memset(test.mem.buffer, 0xFF, memory_size_barrier);
+  cspec_memset(arena_start, 'X', cspec_max_memory_pool_size);
+  cspec_memset(end_barrier, 0xFF, memory_size_barrier);
+
+  csSize records_size = sizeof(MemoryRecord) * cspec_max_memory_allocs;
+  cspec_memset(test.mem.records, 0x00, records_size);
 }
 
 static void memory_final_checks(void) {
-  /* Validate all memory records */
-  for (csSize i = 0; i < memory_records_size; ++i) {
-    MemoryRecord* record = &memory_records[i];
 
-    /* Ensure all fences are in - tact */
+  /* No memory operations took place during this test (no mallocs or frees) */
+  if (memory_test_unused()) {
+    return;
+  }
+
+  /* Check barrier fences */
+  for (csSize i = 0; i < memory_size_barrier; ++i) {
+    if (0xFF != test.mem.buffer[i]
+    ||  0xFF != test.mem.buffer[i + memory_size_barrier + memory_size_max]
+    ) {
+      _cspec_error_mem("after: primary fence broken (large overrun)", NULL);
+    }
+  }
+
+  /* Validate all memory records */
+  for (csSize i = 0; i < test.pass.count_mallocs; ++i) {
+    MemoryRecord* record = &test.mem.records[i];
+    csByte* block = record->block + memory_size_fence;
+
+    /* Ensure all fences are intact */
     if (!memory_check_fence(record)) {
       _cspec_error_mem("after: detected buffer over/underrun", record);
     }
 
     /* Ensure memory hasn't been modified after free */
     if (record->is_free) {
-      csByte* block = record->block + memory_size_fence;
       for (csSize j = 0; j < record->size; ++j) {
         if (block[j] != 'F') {
           _cspec_error_mem("after: memory modified after free", record);
@@ -730,31 +719,24 @@ static void memory_final_checks(void) {
     }
   }
 
-  /* Check barrier fences */
-  for (csSize i = 0; i < memory_size_barrier; ++i) {
-    if (0xFF != _memory[i]
-    ||  0xFF != _memory[i + memory_size_barrier + memory_size_max]
-    ) {
-      _cspec_error_mem("after: primary fence broken (large overrun)", NULL);
-    }
-  }
-
   /* Ensure malloc / free parity */
-  if (memory_count_mallocs != memory_count_frees) {
+  if (test.pass.count_mallocs != test.pass.count_frees) {
     int level = _cspec_error_mem("after: mismatched malloc/free calls", NULL);
     if (test.in_progress) {
-      if (!memory_expect_error) {
+      if (!test.pass.expect_memory_error) {
         cspec_out_pad(param.tabsize * level + 21, ' ');
         cspec_out_fmt("mallocs: {}, frees: {}%n");
-        cspec_out_int(memory_count_mallocs);
-        cspec_out_int(memory_count_frees);
+        cspec_out_int(test.pass.count_mallocs);
+        cspec_out_int(test.pass.count_frees);
         cspec_out_print();
       }
     }
   }
 
   /* Ensure malloc was called if it was asked to fail */
-  if (memory_malloc_fail >= M_WAS_EXPECTED && !memory_malloc_forced_failures) {
+  if (test.pass.force_malloc_null >= M_WAS_EXPECTED
+  && !test.pass.count_expected_malloc_fails
+  ) {
     char err[] = "memory error: after: malloc fail requested, but never called";
     /*
     * causes regular error rather than memory error, since this is a failure
@@ -766,67 +748,54 @@ static void memory_final_checks(void) {
 }
 
 void* cspec_malloc(csSize size) {
-  if (!memory_records || !test.in_function) {
-    /* ++memory_count_mallocs; */
-    void* ret = malloc(size);
 
-    /* Still set the memory with memtesting off */
-    if (test.in_function) {
-      cspec_memset(ret, 'X', size);
-    }
-
-    return ret;
-  }
-
+  /* Zero-size malloc or realloc is implementation dependent */
   if (size == 0) {
+    _cspec_error_mem(
+      "malloc: calling malloc with a zero size is undefined", NULL
+    );
     return NULL;
   }
 
-  if (memory_malloc_fail >= M_FAIL_ONCE) {
-    if (memory_malloc_fail == M_FAIL_ONCE) {
-      memory_malloc_fail = M_WAS_EXPECTED;
+  /* Fail the allocation if the user requested it, count the failures */
+  if (test.pass.force_malloc_null >= M_FAIL_ONCE) {
+    if (test.pass.force_malloc_null == M_FAIL_ONCE) {
+      test.pass.force_malloc_null = M_WAS_EXPECTED;
     }
-    ++memory_malloc_forced_failures;
+    ++test.pass.count_expected_malloc_fails;
     return NULL;
   }
 
-  csSize next = memory_ptr + memory_size_fence*2 + size;
+  /* bbbbbbbXXXXXXXXXXXXXXXXeeeeeee*/
+  csSize next = test.mem.ptr + memory_size_fence*2 + size;
 
-  if (next >= memory_size_max - memory_size_fence*2) {
-    memory_expect_error = FALSE;
+  if (next > memory_size_full + memory_size_barrier) {
+    test.pass.expect_memory_error = FALSE;
     _cspec_error_mem(
       "malloc: ran out of test memory space! Increase limit from "
-      STR(memory_size_max)" bytes.", NULL
+      STR(cspec_max_memory_pool_size)" bytes.", NULL
     );
 
     return NULL;
   }
 
-  ++memory_count_mallocs;
+  if (test.pass.count_mallocs >= cspec_max_memory_allocs) {
+    test.pass.expect_memory_error = FALSE;
+    _cspec_error_mem(
+      "malloc: ran out of test memory allocations! Increase limit from "
+      STR(cspec_max_memory_allocs)" allocations.", NULL
+    );
 
-  if (memory_records_size >= memory_records_capacity) {
-    csSize new_cap = (csSize)(
-      (float)memory_records_capacity * memory_records_grow_factor
-    );
-    MemoryRecord* new_mem_rec = realloc(
-      memory_records, new_cap * sizeof(MemoryRecord)
-    );
-    if (!new_mem_rec) {
-      memory_expect_error = FALSE;
-      cspec_out_str("memory error: malloc: ran out of actual memory?");
-      cspec_out_print();
-      return NULL;
-    }
-    memory_records = new_mem_rec;
-    memory_records_capacity = new_cap;
+    return NULL;
   }
 
-  MemoryRecord* record = &memory_records[memory_records_size++];
+  MemoryRecord* record = test.mem.records + test.pass.count_mallocs;
 
-  if (memory_ptr != 0) {
-    csSize fence = memory_ptr - memory_size_fence;
-    for (; fence < memory_ptr; ++fence) {
-      if (memory[fence] != 'e') {
+  /* If this isn't the first allocation, validate the fence before it */
+  if (test.mem.ptr > memory_size_barrier) {
+    csSize fence = test.mem.ptr - memory_size_fence;
+    for (; fence < test.mem.ptr; ++fence) {
+      if (test.mem.buffer[fence] != 'e') {
         _cspec_error_mem("malloc: preceeding fence broken", record - 1);
         return NULL;
       }
@@ -834,57 +803,53 @@ void* cspec_malloc(csSize size) {
   }
 
   record->size = size;
-  record->block = memory + memory_ptr;
+  record->block = test.mem.buffer + test.mem.ptr;
+  record->ptr = record->block + memory_size_fence;
   record->is_free = FALSE;
-  cspec_memset(record->block, 'b', memory_size_fence);
-  cspec_memset(record->block + memory_size_fence, 'N', size);
-  cspec_memset(record->block + memory_size_fence + size, 'e', memory_size_fence);
+  cspec_memset(record->block,       'b', memory_size_fence);
+  cspec_memset(record->ptr,         'N', size);
+  cspec_memset(record->ptr + size,  'e', memory_size_fence);
 
-  memory_ptr = next;
+  test.mem.ptr = next;
+  ++test.pass.count_mallocs;
 
-  return record->block + memory_size_fence;
+  return record->ptr;
 }
 
 void cspec_free(void* mem_) {
-  csByte* mem = mem_;
+  csByte* const mem = mem_;
 
-  if (!memory_records || !test.in_function) {
-    /* ++memory_count_frees; */
-    free(mem);
+  /* free(NULL) is a valid NOP */
+  if (mem == NULL) {
     return;
   }
 
-  /* free(NULL) is a NOP */
-  if (mem == NULL)
-    return;
-
   /* check for memory outside of our bounds */
-  if (mem < memory || mem >= memory + memory_size_max) {
+  csByte* buf_end = test.mem.buffer + memory_size_full - memory_size_barrier;
+  if (mem < test.mem.buffer
+  ||  mem + memory_size_fence*2 >= buf_end
+  ) {
     MemoryRecord tmp = {
-      .block = mem_, .size = 16 - memory_size_fence * 2, .is_free = TRUE
+      .block = mem - memory_size_fence, .ptr = mem, .size = 1, .is_free = TRUE
     };
     _cspec_error_mem("free: invalid pointer, out of bounds", &tmp);
     return;
   }
 
   /* check if the pointer is in our allocated pointers list */
-  MemoryRecord* record = bsearch(
-    mem, memory_records,
-    memory_records_size, sizeof(MemoryRecord),
-    memory_record_compare
-  );
+  MemoryRecord* record = memory_record_from_ptr(mem);
 
   if (record == NULL) {
     MemoryRecord tmp = {
-      .block = mem_, .size = 16 - memory_size_fence*2, .is_free = TRUE
+      .block = mem - memory_size_fence, .ptr = mem, .size = 1, .is_free = TRUE
     };
     _cspec_error_mem("free: invalid pointer, not malloc result", &tmp);
     return;
   }
 
-  /* check for double - free */
+  /* check for double-free */
   if (record->is_free) {
-    _cspec_error_mem("free: pointer already freed", NULL);
+    _cspec_error_mem("free: pointer already freed", record);
   }
 
   /* check fences */
@@ -893,98 +858,122 @@ void cspec_free(void* mem_) {
   }
 
   /* free the memory */
-  cspec_memset(record->block + memory_size_fence, 'F', record->size);
+  cspec_memset(record->ptr, 'F', record->size);
   record->is_free = TRUE;
-  ++memory_count_frees;
+  ++test.pass.count_frees;
 }
 
 void* cspec_calloc(csSize ct, csSize sel) {
-  if (!memory_records || !test.in_function) {
-    return calloc(ct, sel);
-  }
-
   csByte* ret = cspec_malloc(ct * sel);
   if (!ret) return NULL;
-
   cspec_memset(ret, 0, ct * sel);
   return ret;
 }
 
-void* cspec_realloc(void* mem, csSize nsize) {
-  if (!memory_records || !test.in_function) {
-    /* if (mem == NULL) ++memory_count_mallocs; */
-    return realloc(mem, nsize);
-  }
+void* cspec_realloc(void* mem_, csSize nsize) {
+  csByte* const mem = mem_;
 
+  /* realloc(NULL, size) is a passthrough for malloc(size) */
   if (mem == NULL) {
     return cspec_malloc(nsize);
   }
 
-  /* you can realloc the last block, but that's it */
-  if (memory_records_size) {
-    MemoryRecord* record = &memory_records[memory_records_size - 1];
+  /* No previous blocks allocated, memory block has no matches (bad pointer) */
+  if (test.pass.count_mallocs == 0) {
+    _cspec_error_mem("realloc: non-null on first invocation", NULL);
+    return cspec_malloc(nsize);
+  }
 
-    if (memory_malloc_fail >= M_FAIL_ONCE) {
-      if (memory_malloc_fail == M_FAIL_ONCE) {
-        memory_malloc_fail = M_WAS_EXPECTED;
-      }
-      ++memory_malloc_forced_failures;
-      return NULL;
+  MemoryRecord* record = memory_record_from_ptr(mem);
+
+  /* Memory block has no valid matches (bad pointer) */
+  if (record == NULL) {
+    MemoryRecord tmp = {
+      .block = mem - memory_size_fence, .ptr = mem, .size = 1, .is_free = TRUE
+    };
+    _cspec_error_mem("realloc: invalid pointer (not from malloc)", &tmp);
+    return NULL;
+  }
+
+  /* Always validate the fence */
+  if (!memory_check_fence(record)) {
+    _cspec_error_mem("realloc: broken fence", record);
+    return NULL;
+  }
+
+  csBool last_record = record == &test.mem.records[test.pass.count_mallocs - 1];
+
+  /* If always-move is enabled, skip shrink operations */
+  if (test.pass.force_realloc_move < M_FAIL_ONCE) {
+
+    /* Same size, do nothing */
+    if (nsize == record->size) {
+      return mem;
     }
 
-    if (record->block + memory_size_fence == mem) {
-
-      if (!memory_check_fence(record)) {
-        _cspec_error_mem("realloc: broken fence", record);
-        return NULL;
+    /* Any block can be resized down */
+    if (nsize < record->size) {
+      csSize diff = record->size - nsize;
+      cspec_memset(record->ptr + nsize, 'e', memory_size_fence);
+      cspec_memset(record->ptr + record->size + memory_size_fence, 'F', diff);
+      if (last_record) {
+        test.mem.ptr -= diff;
       }
-
-      if (nsize == record->size) {
-        return mem;
-      }
-
-      csByte* block_start = record->block + memory_size_fence;
-
-      /* different behavior between expanding vs contracting memory space */
-      if (nsize > record->size) {
-        cspec_memset(block_start + nsize, 'e', memory_size_fence);
-        cspec_memset(block_start + record->size, 'N', nsize - record->size);
-
-      /* case for shrinking the space */
-      } else {
-        cspec_memset(block_start + nsize, 'e', memory_size_fence);
-        cspec_memset(block_start + nsize + memory_size_fence, 'X', record->size - nsize);
-      }
-
       record->size = nsize;
-      memory_ptr = block_start + record->size + memory_size_fence - memory;
-
-      return record->block + memory_size_fence; // mem
-
-    } else {
-      void* ret = cspec_malloc(nsize);
-      if (!ret) {
-        _cspec_error_mem("realloc: malloc failed in realloc", NULL);
-        return ret;
-      }
-
-      cspec_memcpy(ret, record->block, record->size + memory_size_fence * 2);
-      cspec_free(record->block + memory_size_fence);
-      return ret;
+      return mem;
     }
   }
 
-  _cspec_error_mem("realloc: nothing previously allocated", NULL);
-  return cspec_malloc(nsize);
+  /* Only the most recent block can be embiggened, if not it, allocate here */
+  /* Also perform the move if the caller enabled always-move option */
+  if (!last_record || test.pass.force_realloc_move >= M_FAIL_ONCE) {
+    void* ret = cspec_malloc(nsize);
+
+    if (!ret) {
+      _cspec_error_mem("realloc: malloc failed in realloc", NULL);
+      return NULL;
+    }
+
+    if (test.pass.force_realloc_move == M_FAIL_ONCE) {
+      test.pass.force_realloc_move = M_WAS_EXPECTED;
+    }
+
+    cspec_memcpy(ret, record->ptr, record->size);
+    cspec_free(record->ptr);
+    return ret;
+  }
+
+  /* At this point the record is the last one and needs to be grown */
+
+  /* Realloc can also fail to increase the size, check for force fails */
+  if (test.pass.force_malloc_null >= M_FAIL_ONCE) {
+    if (test.pass.force_malloc_null == M_FAIL_ONCE) {
+      test.pass.force_malloc_null = M_WAS_EXPECTED;
+    }
+    ++test.pass.count_expected_malloc_fails;
+    return NULL;
+  }
+
+  /* Calculate the next ptr value */
+  csSize next = test.mem.ptr + (nsize - record->size);
+
+  if (next > memory_size_full + memory_size_barrier) {
+    test.pass.expect_memory_error = FALSE;
+    _cspec_error_mem(
+      "malloc: ran out of test memory space! Increase limit from "
+      STR(cspec_max_memory_pool_size)" bytes.", NULL
+    );
+    return NULL;
+  }
+
+  cspec_memset(record->ptr + nsize, 'e', memory_size_fence);
+  cspec_memset(record->ptr + record->size, 'N', nsize - record->size);
+
+  record->size = nsize;
+  test.mem.ptr = next;
+
+  return mem;
 }
-
-#else
-
-static void memory_final_checks() { }
-static void memory_test_reset(csBool enable) { (void)enable; }
-void _memory_print_block(const void* ptr, int rows) { (void)ptr; (void)rows; }
-
-#endif
 
 /*----------------------------------------------------------------------------*\
   Assertion Handling
@@ -1315,23 +1304,19 @@ void _cspec_error_fn(const char* message) {
   }
 }
 
-#ifdef CSPEC_USE_MEMORY_TESTING
-
 static int _cspec_error_mem(const char* message, const MemoryRecord* record) {
   int level = 0;
   if (test.in_progress) {
-    if (!memory_expect_error) {
+    if (!test.pass.expect_memory_error) {
       level = test_error_no_fail(message, TRUE);
       if (record) {
         memory_print_record(record, level + 1);
       }
     }
-    memory_error = TRUE;
+    test.pass.expect_memory_error = TRUE;
   }
   return level;
 }
-
-#endif
 
 /*----------------------------------------------------------------------------*\
   Printing of typed values
@@ -1594,21 +1579,17 @@ csBool _cspec_end(void) {
 
   if (!test.pass.failed   ^ test.pass.expect_fail
   &&  !test.pass.critical ^ test.pass.expect_assert
-#ifdef CSPEC_USE_MEMORY_TESTING
-  &&  !memory_error ^ memory_expect_error
-#endif
+  &&  !test.pass.memory_error ^ test.pass.expect_memory_error
   ) {
     ++test.count_passed;
 
-    if (test.pass.expect_count == 0) {
+    if (test.pass.count_expects == 0) {
       print_headers(CONCOL_Yellow, LOGGED, " (not implemented)");
       ++test.count_warnings;
 
     } else if (param.verbose >= V_RUN || param.line) {
       csBool failed = test.pass.expect_fail;
-#ifdef CSPEC_USE_MEMORY_TESTING
-      failed |= memory_expect_error;
-#endif
+      failed |= test.pass.expect_memory_error;
       const char* failnote = failed ? " (failed successfully)" : NULL;
       print_headers(CONCOL_Green, LOGGED, failnote);
     }
@@ -1621,11 +1602,9 @@ csBool _cspec_end(void) {
       test.pass.expect_fail = FALSE;
       _cspec_error_fn("expected an assert failure, but received none");
     }
-#ifdef CSPEC_USE_MEMORY_TESTING
-    if (memory_expect_error) {
+    if (test.pass.expect_memory_error) {
       _cspec_error_fn("expected memory errors, but none were found");
     }
-#endif
   }
 
   test.in_progress = FALSE;
@@ -1638,7 +1617,7 @@ csBool _cspec_active(void) {
 }
 
 void _cspec_expcount(void) {
-  ++test.pass.expect_count;
+  ++test.pass.count_expects;
 }
 
 /*----------------------------------------------------------------------------*\
@@ -1651,7 +1630,6 @@ csBool _cspec_expect_to_fail(void) {
   return TRUE;
 }
 
-#ifdef CSPEC_USE_MEMORY_TESTING
 static csBool memory_directive_warning(void) {
   if (param.skip_memory_test) {
     _cspec_warn_fn(0xFFFFFFFF,
@@ -1662,7 +1640,6 @@ static csBool memory_directive_warning(void) {
   }
   return FALSE;
 }
-#endif
 
 csBool _cspec_expect_assertion_failure(void) {
   test.pass.expect_assert = TRUE;
@@ -1673,58 +1650,37 @@ csBool _cspec_expect_assertion_failure(void) {
 }
 
 csBool _cspec_memory_expect_to_fail(void) {
-#ifdef CSPEC_USE_MEMORY_TESTING
   if (memory_directive_warning()) {
     test.pass.skip = TRUE;
     return !test.in_progress;
   } else if(!param.no_expect_fail)
-    memory_expect_error = TRUE;
+    test.pass.expect_memory_error = TRUE;
   return TRUE;
-#else
-  _cspec_error_fn("Expected memory failure, but memory testing is disabled");
-  return TRUE;
-#endif
 }
 
 csBool _cspec_memory_malloc_null(csBool only_once) {
-#ifdef CSPEC_USE_MEMORY_TESTING
   if (memory_directive_warning()) {
     test.pass.skip = TRUE;
     return !test.in_progress;
   } else
-    memory_malloc_fail = only_once ? M_FAIL_ONCE : M_FAIL_ALWAYS;
+    test.pass.force_malloc_null = only_once ? M_FAIL_ONCE : M_FAIL_ALWAYS;
   return TRUE;
-#else
-  (void)only_once;
-  _cspec_error_fn("Requesting failed malloc, but memory testing is disabled");
-  return TRUE;
-#endif
 }
 
 int _cspec_memory_malloc_count(void) {
-#ifdef CSPEC_USE_MEMORY_TESTING
   if (memory_directive_warning()) {
     test.pass.skip = TRUE;
     return -1;
   }
-  return memory_count_mallocs;
-#else
-  _cspec_error_fn("Reading malloc counts, but memory testing is disabled");
-  return -1;
-#endif
+  return test.pass.count_mallocs;
 }
 
 int _cspec_memory_free_count(void) {
-#ifdef CSPEC_USE_MEMORY_TESTING
   if (memory_directive_warning()) {
     test.pass.skip = TRUE;
     return -1;
   }
-  return memory_count_frees;
-#else
-  _cspec_error_fn("Reading free counts, but memory testing is disabled");
-  return -1;
-#endif
+  return test.pass.count_frees;
 }
 
 /*----------------------------------------------------------------------------*\

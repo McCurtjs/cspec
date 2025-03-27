@@ -24,10 +24,6 @@
 
 #include "cspec.h"
 
-#ifdef malloc
-# include <stdlib.h>
-#endif
-
 describe(deduction) {
 
   // ignore these tests if not >= C11
@@ -144,36 +140,25 @@ describe(tests) {
 #endif
 describe(memory) {
 
-#ifndef malloc
-
-  it("does not run memory tests when malloc is not defined") {
-    test_log("Not doing any memory tests because malloc has not been defined");
-    test_log("In order to use memory testing/ASAN, use -Dmalloc=cspec_malloc");
-    test_log("or the  equivalent to  your compiler,  and the same  for free,");
-    test_log("realloc, and calloc.");
-  }
-
-#else
-
   context("tests succeed") {
 
     it("properly frees the memory after allocating") {
-      char* c = malloc(1);
+      char* c = cspec_malloc(1);
       c[0] = 0;
-      free(c);
+      cspec_free(c);
     }
 
     it("allocates a block and logs the memory") {
-      int* i = malloc(sizeof(int) * 3);
+      int* i = cspec_malloc(sizeof(int) * 3);
       i[0] = 1819043144;
       i[1] = 1752440943;
       i[2] = 560296549;
       test_log_memory(i);
-      free(i);
+      cspec_free(i);
     }
 
     it("fills memory without overrunning") {
-      char* buffer = malloc(5);
+      char* buffer = cspec_malloc(5);
       expect(buffer != NULL);
       for (int i = 0; i < 5; ++i) {
         buffer[i] = '!';
@@ -181,44 +166,44 @@ describe(memory) {
       expect(buffer[0], == , '!', char);
       expect(buffer[4], == , '!', char);
       expect(buffer[5], != , '!', char);
-      free(buffer);
+      cspec_free(buffer);
     }
 
     it("makes malloc return NULL once") {
       expect(null_malloc);
 
-      char* buffer = malloc(5);
+      char* buffer = cspec_malloc(5);
       expect(buffer == NULL);
 
-      buffer = malloc(5);
+      buffer = cspec_malloc(5);
       expect(buffer != NULL);
-      free(buffer);
+      cspec_free(buffer);
     }
 
     it("makes malloc return NULL for the rest of the test") {
       expect(null_mallocs);
 
-      char* buffer = malloc(5);
+      char* buffer = cspec_malloc(5);
       expect(buffer == NULL);
 
-      buffer = malloc(5);
+      buffer = cspec_malloc(5);
       expect(buffer == NULL);
     }
 
     it("makes sure malloc sets non-zero memory") {
-      int* buffer = malloc(sizeof(int) * 5);
+      int* buffer = cspec_malloc(sizeof(int) * 5);
       for (int i = 0; i < 5; ++i) {
         expect(buffer[i] != 0);
       }
-      free(buffer);
+      cspec_free(buffer);
     }
 
     it("ensures calloc returns zero-initialized memory") {
-      int* buffer = calloc(5, sizeof(int));
+      int* buffer = cspec_calloc(5, sizeof(int));
       for (int i = 0; i < 5; ++i) {
         expect(buffer[i] == 0);
       }
-      free(buffer);
+      cspec_free(buffer);
     }
 
   }
@@ -228,52 +213,48 @@ describe(memory) {
     expect(memory_errors);
 
     it("allocates memory and never frees") {
-      char* test_mem = malloc(42);
+      char* test_mem = cspec_malloc(42);
       const char copystr[] = "This allocates a string without deleting.";
       const char* c_array_foreach_index(pc, i, copystr) test_mem[i] = *pc;
     }
 
-#ifdef malloc
     it("passes a bad pointer to realloc") {
-      char* buffer = realloc((void*)1, 5);
-      free(buffer);
+      char* buffer = cspec_realloc((void*)1, 5);
+      cspec_free(buffer);
     }
 
     it("tries to free memory outside of the sandbox") {
       int x = 0;
-      free(&x);
+      cspec_free(&x);
     }
-#endif
 
-#if defined(malloc) || !defined(_MSC_VER)
     it("causes a buffer overrun") {
-      char* buffer = malloc(5);
+      char* buffer = cspec_malloc(5);
       cspec_assert(buffer);
       for (int i = 0; i <= 5; ++i) {
         buffer[i] = '!';
       }
-      free(buffer);
+      cspec_free(buffer);
     }
 
     it("double-frees") {
-      char* buffer = malloc(5);
-      free(buffer);
-      free(buffer);
+      char* buffer = cspec_malloc(5);
+      cspec_free(buffer);
+      cspec_free(buffer);
     }
 
     it("tries to free the wrong address within allocated memory") {
-      char* buffer = malloc(5);
-      free(buffer + 1);
-      free(buffer);
+      char* buffer = cspec_malloc(5);
+      cspec_free(buffer + 1);
+      cspec_free(buffer);
     }
 
     it("modifies allocated memory after free") {
-      char* buffer = malloc(5);
+      char* buffer = cspec_malloc(5);
       expect(buffer != NULL);
-      free(buffer);
+      cspec_free(buffer);
       buffer[2] = '!';
     }
-#endif
 
     /* Blocking because it's an actual fail case (don't want tests succeeding
     // while expecting them to fail in other ways, when they're actaully just
@@ -298,8 +279,6 @@ describe(memory) {
     }
 
   }
-
-#endif
 
 }
 #ifdef _MSC_VER
