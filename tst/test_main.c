@@ -43,7 +43,7 @@ int __attribute__((export_name("spec_main"))) spec_main(int argc, int line) {
 #else
 int main(int argc, char* argv[]) {
 #endif
-  argv = (char*[]){ "BLAH", "-vfs", "out_spec.c" };
+  argv = (char*[]){ "BLAH", "-vfs", ":416" };
   argc = 2;
 
   TestSuite* test_suites[] = {

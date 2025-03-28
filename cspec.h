@@ -134,6 +134,10 @@ typedef struct TestSuite {
 #define cspec_max_output_size 511
 #endif
 
+#ifndef cspec_out_float_precision
+#define cspec_out_float_precision 10
+#endif
+
 /*----------------------------------------------------------------------------*\
   Test setup
 \*----------------------------------------------------------------------------*/
@@ -287,7 +291,7 @@ typedef struct TestSuite {
 *   call, will print the whole allocated segment. Any other pointer will print
 *   just three rows of 16 bytes (starting 16 before the requested pointer).
 */
-#define test_log_memory(ptr)      _cspec_memory_log_block(__LINE__, ptr);
+#define test_log_memory(ptr)      cspec_out_memory(__LINE__, ptr);
 
 /*----------------------------------------------------------------------------*\
   Value checking with "Expect"
@@ -1012,16 +1016,14 @@ csBool  _cspec_active(void);
 void    _cspec_expcount(void);
 csBool  _cspec_context_begin(int line, const char* desc);
 csBool  _cspec_context_end(int line);
-void    _cspec_log_fn(int line, const char* messgae);
-void    _cspec_warn_fn(int line, const char* message);
-void    _cspec_error_fn(const char* message);
+void    _cspec_log(int status, int line, const void* mem, const char* message);
 csBool  _cspec_expect_to_fail(void);
 csBool  _cspec_expect_assertion_failure(void);
 csBool  _cspec_memory_expect_to_fail(void);
 csBool  _cspec_memory_malloc_null(csBool only_next);
 int     _cspec_memory_malloc_count(void);
 int     _cspec_memory_free_count(void);
-void    _cspec_memory_log_block(int line, const void* ptr);
+void    cspec_out_memory(int line, const void* ptr);
 int     _cspec_run_all(int count, TestSuite* suites[], int argc, char* argv[]);
 void    _cspec_error_typed(int line, const char* pfix, const char* fmt,
   const char* t_a0, const void* a0, const char* t_a1, const void* a1,
@@ -1135,9 +1137,9 @@ void    _cspec_error_typed(int line, const char* pfix, const char* fmt,
 #define _test_group(TEST_FN) { .line = &_fn_line_##TEST_FN, .header=#TEST_FN, .group_fn = test_##TEST_FN }
 #define _test_suite_end { .line = NULL, .group_fn = NULL } })
 
-#define _test_log(message) _cspec_log_fn(__LINE__, message)
-#define _test_warn(message) _cspec_warn_fn(__LINE__, message)
-#define _test_fail(issue) do { _cspec_error_fn(issue); return; } while(0)
+#define _test_log(message) _cspec_log(0, __LINE__, NULL, message)
+#define _test_warn(message) _cspec_log(1, __LINE__, NULL, message)
+#define _test_fail(issue) do { _cspec_log(2, __LINE__, NULL, issue); return; } while(0)
 
 #define _test_fail_args_va(S,fmt,A,a,B,b,C,c,D,d,E,e,F,f,G,g,H,h,I,i,J,j,...) _cspec_error_typed(__LINE__,S,fmt,A,a,B,b,C,c,D,d,E,e,F,f,G,g,H,h,I,i,J,j)
 #define _test_fail_args(S, /* fmt, */ ...) _test_fail_args_va(S,__VA_ARGS__,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0)
@@ -1158,16 +1160,16 @@ void    _cspec_error_typed(int line, const char* pfix, const char* fmt,
 # define _expect_expr(S, A, x, B, ...)              AUTO_DUP(_A , (A));   AUTO_DUP(_B    , (B));                    if (!(_A x _B))   _test_fail_t(A, x, B, _type_s(_A), _type_s(_B))
 # define _expect_comp(S, A, F, ...)                 AUTO_DUP(_R , (A));   csBool   _test = F(_R);                   if (!_test)       _test_fail_comp(S)
 #else
-# define _expect_fn_expr(S, F, x, B, P, ...)                              csBool   _test = ((F P) x (B));           if (!_test)       _test_fail("line "STR(__LINE__)": expected X "#x" "#B" where X == "#F#P)
-# define _expect_fn_comp(S, F, M, P, ...)                                 csBool   _test = M((F P));                if (!_test)       _test_fail("line "STR(__LINE__)": expected "S)
-# define _expect_fn_true(S, A, F, B, ...)                                                                           if (!(F(A, B)))   _test_fail("line "STR(__LINE__)": expected to pass "#F"( "#A", "#B" )")
-# define _expect_expr(S, A, x, B, ...)              _deduct_warn("expect(lhs, "#x" , rhs, type)");                  if(!(A x B))      _test_fail("line "STR(__LINE__)": expected "#A" "#x" "#B)
-# define _expect_comp(S, A, F, ...)                                       csBool   _test = F(A);                    if (!_test)       _test_fail("line "STR(__LINE__)": expected "S)
+# define _expect_fn_expr(S, F, x, B, P, ...)                              csBool   _test = ((F P) x (B));           if (!_test)       _test_fail("expected X "#x" "#B" where X == "#F#P)
+# define _expect_fn_comp(S, F, M, P, ...)                                 csBool   _test = M((F P));                if (!_test)       _test_fail("expected "S)
+# define _expect_fn_true(S, A, F, B, ...)                                                                           if (!(F(A, B)))   _test_fail("expected to pass "#F"( "#A", "#B" )")
+# define _expect_expr(S, A, x, B, ...)              _deduct_warn("expect(lhs, "#x" , rhs, type)");                  if(!(A x B))      _test_fail("expected "#A" "#x" "#B)
+# define _expect_comp(S, A, F, ...)                                       csBool   _test = F(A);                    if (!_test)       _test_fail("expected "S)
 #endif
 #define _expect_comp_all(S, A, E, B, x, T, F, ...)                        csBool   _test = F(A, B, E, x);           if (!_test)       _test_fail_all(S, T)
 #define _expect_type2(S, A, x, B, T, t, ...)        T        _A = (A);    t        _B    = (B);                     if (!(_A x _B))   _test_fail_t(A, x, B, #T, #t)
 #define _expect_type1(S, A, x, B, T, ...)           T        _A = (A);    T        _B    = (B);                     if (!(_A x _B))   _test_fail_t(A, x, B, #T, #T)
-#define _expect_true(S, A, ...)                                                                                     if (!(A))         _test_fail("line "STR(__LINE__)": expected "S)
+#define _expect_true(S, A, ...)                                                                                     if (!(A))         _test_fail("expected "S)
 #define _expect_va(S, U, V, W, X, Y, Z,_0,_1,_2, F, ...) do { _cspec_expcount(); _expect##F(S, U, V, W, X, Y, Z); } while(0)
 #define _expect(S, ...) _expect_va(S, __VA_ARGS__, _fn_expr, _fn_comp, _fn_true, _comp_all, _type2, _type1, _expr, _comp, _true)
 

@@ -22,12 +22,6 @@
 * SOFTWARE.
 */
 
-/*
-* TODO: cspec_malloc should always be available, and not depend on stdlib.
-*   This will allow users to take the cspec_alloc functions and include them in
-*   custom allocators without having to globally define malloc (which will still
-*   be an option).
-*/
 #ifdef assert
 # define CSPEC_USE_ASSERT_HANDLING
 #endif
@@ -37,8 +31,8 @@
 *   assertion handling with longjmp.
 */
 #ifdef CSPEC_USE_ASSERT_HANDLING
-# include <setjmp.h>
 # undef assert
+# include <setjmp.h>
 # include <assert.h>
 # define real_assert(X) assert(X)
 #elif defined(__GNUC__) && defined(__has_builtin)
@@ -96,9 +90,9 @@ typedef enum ConsoleColor {
 } ConsoleColor;
 
 typedef enum PrintLevel {
-  NOT_PRINTED = 0,
-  LOGGED,
-  PRINTED
+  P_CLEAR,
+  P_LOGGED,
+  P_ERROR
 } PrintLevel;
 
 typedef enum Verbosity {
@@ -112,14 +106,15 @@ typedef enum Status {
   S_NOMINAL,
   S_WARNING,
   S_FAILURE,
+  S_MEMFAIL,
   S_ASSERTS
 } Status;
 
 typedef enum MallocFailLevel {
   M_NORMAL,
-  M_WAS_EXPECTED,
-  M_FAIL_ONCE,
-  M_FAIL_ALWAYS
+  M_HAPPENED,
+  M_ONCE,
+  M_ALWAYS
 } MallocFailLevel;
 
 static struct InputParams {
@@ -134,23 +129,50 @@ static struct InputParams {
   csBool show_results;      /* -r */
 } param;
 
-#define cspec_output_size 512
-
 struct OutputEnv {
   char buffer[cspec_max_output_size + 1];
   csUint index;
-  csUint indent; /* Extra indent for printing alignment on newlines */
+  csUint tabstop; /* Extra indent for printing alignment on newlines */
   const char* fmt;
   int fmt_lock;
   ConsoleColor color;
 };
 
-typedef struct TestContext {
+/* Record to track layers in the context stack */
+typedef struct Context {
   const char* desc;
   csBool printed;
   csBool requested_context;
 } Context;
 
+/* Stack for tracking which context */
+struct TestContext {
+  int top;
+  int index;
+  Context stack[cspec_max_context_depth];
+};
+
+#define memory_size_barrier 32
+#define memory_size_fence 7
+#define cspec_mem_size (cspec_max_memory_pool_size + memory_size_barrier*2)
+#define memory_size_full cspec_mem_size
+
+/* Record to track individaul allocation locations and status */
+typedef struct MemoryRecord {
+  csSize size;
+  csByte* block;
+  csByte* ptr;
+  csBool is_free;
+} MemoryRecord;
+
+/* Memory arena and allocation tracker */
+struct TestMemory {
+  csSize ptr;
+  MemoryRecord records[cspec_max_memory_allocs];
+  csByte buffer[cspec_mem_size];
+};
+
+/* Info tracked */
 struct TestPass {
   MallocFailLevel force_malloc_null;
   MallocFailLevel force_realloc_move;
@@ -166,24 +188,9 @@ struct TestPass {
   csBool warned;
   csBool critical;
   csBool memory_error;
-};
-
-#define memory_size_barrier 32
-#define memory_size_fence 7
-#define cspec_mem_size (cspec_max_memory_pool_size + memory_size_barrier*2)
-#define memory_size_full cspec_mem_size
-
-typedef struct MemoryRecord {
-  csSize size;
-  csByte* block;
-  csByte* ptr;
-  csBool is_free;
-} MemoryRecord;
-
-struct TestMemory {
-  csSize ptr;
-  MemoryRecord records[cspec_max_memory_allocs];
-  csByte buffer[cspec_mem_size];
+#ifdef CSPEC_USE_ASSERT_HANDLING
+  jmp_buf jump_buffer;
+#endif
 };
 
 static struct TestEnv {
@@ -200,9 +207,6 @@ static struct TestEnv {
   int count_passed;
   int count_warnings;
   struct TestPass pass;
-#ifdef CSPEC_USE_ASSERT_HANDLING
-  jmp_buf jump_buffer;
-#endif
   struct TestContext ctx;
   struct OutputEnv out;
   struct TestMemory mem;
@@ -211,6 +215,7 @@ static struct TestEnv {
 /*----------------------------------------------------------------------------*\
   Useful functions when we don't have a standrad library to rely on
 \*----------------------------------------------------------------------------*/
+#if 1
 
 csBool cspec_isdigit(int c) {
   return '0' <= c && c <= '9';
@@ -311,6 +316,7 @@ int cspec_atoi(const char* s) {
   }
   return result * sign;
 }
+#endif
 
 /*----------------------------------------------------------------------------*\
   String Handling/Output
@@ -319,8 +325,7 @@ int cspec_atoi(const char* s) {
 * works on WASM varianets with no libc, all our string handling for output
 * should be done in a static space to avoid the need for malloc/free.
 */
-#define output_size 511
-#define cspec_out_float_precision 10
+#if 1
 
 static void _cspec_out_ch(char ch) {
   if (test.out.index < cspec_max_output_size) {
@@ -328,7 +333,7 @@ static void _cspec_out_ch(char ch) {
   }
 
   if (ch == '\n') {
-    for (csUint i = 0; i < test.out.indent; ++i) {
+    for (csUint i = 0; i < test.out.tabstop; ++i) {
       _cspec_out_ch(' ');
     }
   }
@@ -365,16 +370,13 @@ static void _cspec_out_str(const char* s, csSize length) {
           _cspec_out_ch(*s++);
           continue;
         }
-
       }
 
       /* if a special character is consumed, skip it in regular output */
       s += 2;
       ++i;
     }
-
   }
-
 }
 
 static void _cspec_out_fmt_continue(void) {
@@ -421,7 +423,7 @@ void cspec_out_clear(void) {
 void cspec_out_fmt(const char* fmt) {
   if (!fmt) return;
   test.out.fmt = fmt;
-  test.out.fmt_lock = FALSE;
+  test.out.fmt_lock = 0;
   _cspec_out_fmt_continue();
 }
 
@@ -561,76 +563,52 @@ void cspec_out_print(void) {
   _cspec_out_print(CONCOL_White);
 }
 
-/*----------------------------------------------------------------------------*\
-  Memory Testing
-\*----------------------------------------------------------------------------*/
+csBool _cspec_mem_in_bounds(const csByte* p) {
+  return p < test.mem.buffer + memory_size_full
+      && p >= test.mem.buffer;
+}
 
-/* #define memory_size_max 4096 // defined in header for customizability */
-
-static int _cspec_error_mem(const char* message, const MemoryRecord* record);
-
-static void memory_print_row(const csByte* row, int level, csBool target) {
+static void _cspec_out_memory_row(const csByte* row, csBool target) {
   cspec_out_clear();
-  cspec_out_pad(param.tabsize * level, ' ');
+  cspec_out_pad(test.out.tabstop, ' ');
+  cspec_out_fmt("{}{} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} ");
   cspec_out_ptr(row);
-  cspec_out_str(target ? "-> " : ":  ");
+  cspec_out_str(target ? "->" : ": ");
+
   for (int i = 0; i < 16; ++i) {
-    if (row + i < test.out.buffer + cspec_mem_size
-    &&  row + i >= test.out.buffer
-    ) {
+    if (_cspec_mem_in_bounds(row + i)) {
       cspec_out_hex(row[i]);
-      cspec_out_ch(' ');
     } else {
-      cspec_out_str("xx ");
+      cspec_out_str("xx");
     }
   }
-  cspec_out_str(target ? "= " : "- ");
+
+  cspec_out_ch(target ? '=' : '-');
+
   for (int i = 0; i < 16; ++i) {
-    if (row + i < test.out.buffer + cspec_mem_size
-    && row + i >= test.out.buffer
-    ) {
+    if (_cspec_mem_in_bounds(row + i)) {
       cspec_out_byte(row[i]);
     } else {
       cspec_out_ch(' ');
     }
   }
+
   cspec_out_print();
 }
 
-static void memory_print_record(const MemoryRecord* record, int level) {
+static void _cspec_out_memory(const MemoryRecord* record) {
   csSize i = 0;
   while (i < record->size + memory_size_fence + 16) {
-    memory_print_row(record->ptr + i - 16, level, i == 16);
+    _cspec_out_memory_row(record->ptr + i - 16, i == 16);
     i += 16;
   }
   if (param.padding) cspec_out_print();
 }
 
-static csBool memory_check_fence(MemoryRecord* record) {
-  for (csSize i = 0; i < memory_size_fence; ++i) {
-    if ('b' != record->block[i]
-    ||  'e' != record->block[i + memory_size_fence + record->size]
-    ) {
-      return FALSE;
-    }
-  }
-  return TRUE;
-}
+static MemoryRecord* memory_record_from_ptr(const void* ptr);
+static void print_headers(int desc_color, PrintLevel desc_level, const char* to_append);
 
-static MemoryRecord* memory_record_from_ptr(const void* ptr) {
-  for (csUint i = 0; i < test.pass.count_mallocs; ++i) {
-    MemoryRecord* rec = &test.mem.records[i];
-    if (rec->ptr == ptr) {
-      return rec;
-    }
-  }
-  return NULL;
-}
-
-static int print_headers(
-  int desc_color, PrintLevel desc_level, const char* to_append);
-
-void _cspec_memory_log_block(int line, const void* ptr) {
+void cspec_out_memory(int line, const void* ptr) {
   if ((test.current_line && test.current_line >= line)
   || param.verbose < V_NOTES
   ) {
@@ -640,567 +618,30 @@ void _cspec_memory_log_block(int line, const void* ptr) {
   /* check if the pointer is in our allocated blocks list */
   MemoryRecord* record = memory_record_from_ptr(ptr);
 
-  int level = print_headers(CONCOL_bWhite, LOGGED, NULL);
+  print_headers(CONCOL_bWhite, P_LOGGED, NULL);
 
   if (param.padding) cspec_out_print();
 
   if (record) {
-    memory_print_record(record, level);
-  } else {
+    _cspec_out_memory(record);
+  }
+  else {
     const csByte* bytes = ptr;
-    memory_print_row(bytes - 16, level, FALSE);
-    memory_print_row(bytes, level, TRUE);
-    memory_print_row(bytes + 16, level, FALSE);
+    _cspec_out_memory_row(bytes - 16, FALSE);
+    _cspec_out_memory_row(bytes, TRUE);
+    _cspec_out_memory_row(bytes + 16, FALSE);
   }
 }
-
-static csBool memory_test_unused() {
-  return test.pass.count_mallocs == 0
-      && test.pass.count_frees == 0
-      && test.pass.force_malloc_null == M_NORMAL
-      && test.pass.force_realloc_move == M_NORMAL
-      && test.pass.expect_memory_error == FALSE;
-}
-
-static void memory_test_reset(csBool force) {
-  /* We can usually skip the reset if memory testing wasn't being used */
-  if (force == FALSE && memory_test_unused()) {
-    return;
-  }
-
-  test.mem.ptr = memory_size_barrier;
-  csByte* arena_start = test.mem.buffer + memory_size_barrier;
-  csByte* end_barrier = arena_start + cspec_max_memory_pool_size;
-  cspec_memset(test.mem.buffer, 0xFF, memory_size_barrier);
-  cspec_memset(arena_start, 'X', cspec_max_memory_pool_size);
-  cspec_memset(end_barrier, 0xFF, memory_size_barrier);
-
-  csSize records_size = sizeof(MemoryRecord) * cspec_max_memory_allocs;
-  cspec_memset(test.mem.records, 0x00, records_size);
-}
-
-static void memory_final_checks(void) {
-
-  /* No memory operations took place during this test (no mallocs or frees) */
-  if (memory_test_unused()) {
-    return;
-  }
-
-  /* Check barrier fences */
-  for (csSize i = 0; i < memory_size_barrier; ++i) {
-    if (0xFF != test.mem.buffer[i]
-    ||  0xFF != test.mem.buffer[i + memory_size_barrier + memory_size_max]
-    ) {
-      _cspec_error_mem("after: primary fence broken (large overrun)", NULL);
-    }
-  }
-
-  /* Validate all memory records */
-  for (csSize i = 0; i < test.pass.count_mallocs; ++i) {
-    MemoryRecord* record = &test.mem.records[i];
-    csByte* block = record->block + memory_size_fence;
-
-    /* Ensure all fences are intact */
-    if (!memory_check_fence(record)) {
-      _cspec_error_mem("after: detected buffer over/underrun", record);
-    }
-
-    /* Ensure memory hasn't been modified after free */
-    if (record->is_free) {
-      for (csSize j = 0; j < record->size; ++j) {
-        if (block[j] != 'F') {
-          _cspec_error_mem("after: memory modified after free", record);
-        }
-      }
-
-    /* Another check for freeing records */
-    } else {
-      _cspec_error_mem("after: allocated memory not freed", record);
-    }
-  }
-
-  /* Ensure malloc / free parity */
-  if (test.pass.count_mallocs != test.pass.count_frees) {
-    int level = _cspec_error_mem("after: mismatched malloc/free calls", NULL);
-    if (test.in_progress) {
-      if (!test.pass.expect_memory_error) {
-        cspec_out_pad(param.tabsize * level + 21, ' ');
-        cspec_out_fmt("mallocs: {}, frees: {}%n");
-        cspec_out_int(test.pass.count_mallocs);
-        cspec_out_int(test.pass.count_frees);
-        cspec_out_print();
-      }
-    }
-  }
-
-  /* Ensure malloc was called if it was asked to fail */
-  if (test.pass.force_malloc_null >= M_WAS_EXPECTED
-  && !test.pass.count_expected_malloc_fails
-  ) {
-    char err[] = "memory error: after: malloc fail requested, but never called";
-    /*
-    * causes regular error rather than memory error, since this is a failure
-    * within the test design rather than memory actually breaking (ie, using
-    * `expect(memory_error)` will not succeed if you forget to call malloc)
-    */
-    _cspec_error_fn(err);
-  }
-}
-
-void* cspec_malloc(csSize size) {
-
-  /* Zero-size malloc or realloc is implementation dependent */
-  if (size == 0) {
-    _cspec_error_mem(
-      "malloc: calling malloc with a zero size is undefined", NULL
-    );
-    return NULL;
-  }
-
-  /* Fail the allocation if the user requested it, count the failures */
-  if (test.pass.force_malloc_null >= M_FAIL_ONCE) {
-    if (test.pass.force_malloc_null == M_FAIL_ONCE) {
-      test.pass.force_malloc_null = M_WAS_EXPECTED;
-    }
-    ++test.pass.count_expected_malloc_fails;
-    return NULL;
-  }
-
-  /* bbbbbbbXXXXXXXXXXXXXXXXeeeeeee*/
-  csSize next = test.mem.ptr + memory_size_fence*2 + size;
-
-  if (next > memory_size_full + memory_size_barrier) {
-    test.pass.expect_memory_error = FALSE;
-    _cspec_error_mem(
-      "malloc: ran out of test memory space! Increase limit from "
-      STR(cspec_max_memory_pool_size)" bytes.", NULL
-    );
-
-    return NULL;
-  }
-
-  if (test.pass.count_mallocs >= cspec_max_memory_allocs) {
-    test.pass.expect_memory_error = FALSE;
-    _cspec_error_mem(
-      "malloc: ran out of test memory allocations! Increase limit from "
-      STR(cspec_max_memory_allocs)" allocations.", NULL
-    );
-
-    return NULL;
-  }
-
-  MemoryRecord* record = test.mem.records + test.pass.count_mallocs;
-
-  /* If this isn't the first allocation, validate the fence before it */
-  if (test.mem.ptr > memory_size_barrier) {
-    csSize fence = test.mem.ptr - memory_size_fence;
-    for (; fence < test.mem.ptr; ++fence) {
-      if (test.mem.buffer[fence] != 'e') {
-        _cspec_error_mem("malloc: preceeding fence broken", record - 1);
-        return NULL;
-      }
-    }
-  }
-
-  record->size = size;
-  record->block = test.mem.buffer + test.mem.ptr;
-  record->ptr = record->block + memory_size_fence;
-  record->is_free = FALSE;
-  cspec_memset(record->block,       'b', memory_size_fence);
-  cspec_memset(record->ptr,         'N', size);
-  cspec_memset(record->ptr + size,  'e', memory_size_fence);
-
-  test.mem.ptr = next;
-  ++test.pass.count_mallocs;
-
-  return record->ptr;
-}
-
-void cspec_free(void* mem_) {
-  csByte* const mem = mem_;
-
-  /* free(NULL) is a valid NOP */
-  if (mem == NULL) {
-    return;
-  }
-
-  /* check for memory outside of our bounds */
-  csByte* buf_end = test.mem.buffer + memory_size_full - memory_size_barrier;
-  if (mem < test.mem.buffer
-  ||  mem + memory_size_fence*2 >= buf_end
-  ) {
-    MemoryRecord tmp = {
-      .block = mem - memory_size_fence, .ptr = mem, .size = 1, .is_free = TRUE
-    };
-    _cspec_error_mem("free: invalid pointer, out of bounds", &tmp);
-    return;
-  }
-
-  /* check if the pointer is in our allocated pointers list */
-  MemoryRecord* record = memory_record_from_ptr(mem);
-
-  if (record == NULL) {
-    MemoryRecord tmp = {
-      .block = mem - memory_size_fence, .ptr = mem, .size = 1, .is_free = TRUE
-    };
-    _cspec_error_mem("free: invalid pointer, not malloc result", &tmp);
-    return;
-  }
-
-  /* check for double-free */
-  if (record->is_free) {
-    _cspec_error_mem("free: pointer already freed", record);
-  }
-
-  /* check fences */
-  if (!memory_check_fence(record)) {
-    _cspec_error_mem("free: broken fence", record);
-  }
-
-  /* free the memory */
-  cspec_memset(record->ptr, 'F', record->size);
-  record->is_free = TRUE;
-  ++test.pass.count_frees;
-}
-
-void* cspec_calloc(csSize ct, csSize sel) {
-  csByte* ret = cspec_malloc(ct * sel);
-  if (!ret) return NULL;
-  cspec_memset(ret, 0, ct * sel);
-  return ret;
-}
-
-void* cspec_realloc(void* mem_, csSize nsize) {
-  csByte* const mem = mem_;
-
-  /* realloc(NULL, size) is a passthrough for malloc(size) */
-  if (mem == NULL) {
-    return cspec_malloc(nsize);
-  }
-
-  /* No previous blocks allocated, memory block has no matches (bad pointer) */
-  if (test.pass.count_mallocs == 0) {
-    _cspec_error_mem("realloc: non-null on first invocation", NULL);
-    return cspec_malloc(nsize);
-  }
-
-  MemoryRecord* record = memory_record_from_ptr(mem);
-
-  /* Memory block has no valid matches (bad pointer) */
-  if (record == NULL) {
-    MemoryRecord tmp = {
-      .block = mem - memory_size_fence, .ptr = mem, .size = 1, .is_free = TRUE
-    };
-    _cspec_error_mem("realloc: invalid pointer (not from malloc)", &tmp);
-    return NULL;
-  }
-
-  /* Always validate the fence */
-  if (!memory_check_fence(record)) {
-    _cspec_error_mem("realloc: broken fence", record);
-    return NULL;
-  }
-
-  csBool last_record = record == &test.mem.records[test.pass.count_mallocs - 1];
-
-  /* If always-move is enabled, skip shrink operations */
-  if (test.pass.force_realloc_move < M_FAIL_ONCE) {
-
-    /* Same size, do nothing */
-    if (nsize == record->size) {
-      return mem;
-    }
-
-    /* Any block can be resized down */
-    if (nsize < record->size) {
-      csSize diff = record->size - nsize;
-      cspec_memset(record->ptr + nsize, 'e', memory_size_fence);
-      cspec_memset(record->ptr + record->size + memory_size_fence, 'F', diff);
-      if (last_record) {
-        test.mem.ptr -= diff;
-      }
-      record->size = nsize;
-      return mem;
-    }
-  }
-
-  /* Only the most recent block can be embiggened, if not it, allocate here */
-  /* Also perform the move if the caller enabled always-move option */
-  if (!last_record || test.pass.force_realloc_move >= M_FAIL_ONCE) {
-    void* ret = cspec_malloc(nsize);
-
-    if (!ret) {
-      _cspec_error_mem("realloc: malloc failed in realloc", NULL);
-      return NULL;
-    }
-
-    if (test.pass.force_realloc_move == M_FAIL_ONCE) {
-      test.pass.force_realloc_move = M_WAS_EXPECTED;
-    }
-
-    cspec_memcpy(ret, record->ptr, record->size);
-    cspec_free(record->ptr);
-    return ret;
-  }
-
-  /* At this point the record is the last one and needs to be grown */
-
-  /* Realloc can also fail to increase the size, check for force fails */
-  if (test.pass.force_malloc_null >= M_FAIL_ONCE) {
-    if (test.pass.force_malloc_null == M_FAIL_ONCE) {
-      test.pass.force_malloc_null = M_WAS_EXPECTED;
-    }
-    ++test.pass.count_expected_malloc_fails;
-    return NULL;
-  }
-
-  /* Calculate the next ptr value */
-  csSize next = test.mem.ptr + (nsize - record->size);
-
-  if (next > memory_size_full + memory_size_barrier) {
-    test.pass.expect_memory_error = FALSE;
-    _cspec_error_mem(
-      "malloc: ran out of test memory space! Increase limit from "
-      STR(cspec_max_memory_pool_size)" bytes.", NULL
-    );
-    return NULL;
-  }
-
-  cspec_memset(record->ptr + nsize, 'e', memory_size_fence);
-  cspec_memset(record->ptr + record->size, 'N', nsize - record->size);
-
-  record->size = nsize;
-  test.mem.ptr = next;
-
-  return mem;
-}
-
-/*----------------------------------------------------------------------------*\
-  Assertion Handling
-\*----------------------------------------------------------------------------*/
-
-void cspec_assert(csBool assertion) {
-
-  real_assert(test.in_progress);
-  if (assertion) return;
-  test.pass.critical = TRUE;
-
-  if (!test.pass.expect_assert) {
-    test.pass.expect_fail = FALSE;
-    _cspec_error_fn("Assertion failed during test");
-    if (cspec_opt_print_backtrace) cspec_opt_print_backtrace();
-  }
-
-#ifdef CSPEC_USE_ASSERT_HANDLING
-  longjmp(test.jump_buffer, 1);
-#else
-  test_warn("Assertion was thrown, but handling is disabled.");
 #endif
-
-}
-
-/*----------------------------------------------------------------------------*\
-  Test Context
-\*----------------------------------------------------------------------------*\
-* A test context allows pre-test setup to be shared between multiple tests.
-* Variables can be created and accessed within the tests, and other setup can
-* be performed before running the tests. After each test, the test group
-* function is exited and re-entered, meaning the context is recreated for every
-* test (ie, incrementing a shared value in one test will not affect the next
-* test), and after the context is passed, the setup won't be run again for any
-* tests that follow it.
-*/
-
-/*
-* To allow nested contexts, we need a stack... the stack persists for the whole
-* test group (between multiple calls of the group function), and is used to
-* keep track of
-*/
-
-#ifndef cspec_ctx_stack_size_max
-# define cspec_ctx_stack_size_max 20
-#endif
-
-static Context ctx_stack[cspec_ctx_stack_size_max] = {
-  {
-    .desc = "<root context>",
-    .printed = FALSE,
-    .requested_context = FALSE,
-  }
-};
-
-/*
-* Iterator through the stack.
-* This is reset to the root between each each call to the test function.
-*/
-static int ctx_stack_index = 0;
-
-/*
-* Index of the top of the stack.
-* The stack is cleared between each test group. Root node cannot be popped.
-*/
-static int ctx_stack_top = 0; // rename to ctx_stack_top
-
-/* Called whenever the test enters a "context()" block */
-csBool _cspec_context_begin(int line, const char* desc) {
-
-  /*
-  * If we are currently executing a test, skip the context (allow previous
-  * contexts to close out their post-test statements)
-  */
-  if (test.in_progress) {
-    return FALSE;
-  }
-
-  /*
-  * On each pass of the test function, we have to walk up the stack. If our
-  * context is already there, don't create a duplicate of it.
-  */
-  if (ctx_stack_index < ctx_stack_top
-  && ctx_stack[ctx_stack_index + 1].desc == desc
-  ) {
-    ++ctx_stack_index;
-    return TRUE;
-  }
-
-  /*
-  * If we're completing execution of the context, we expect it to be at the
-  * top of the stack
-  */
-  if (ctx_stack[ctx_stack_index].desc == desc) {
-    return TRUE;
-  }
-
-  /*
-  * If we're not on the stack anymore, and the current test line is past our
-  * context, we've completed the tests in it and can skip it.
-  */
-  if (test.current_line > line) {
-    return FALSE;
-  }
-
-  /*
-  * Any other context on the stack should still be open (and thus already
-  * passed by the stack ptr), or have already closed out and be gone.
-  */
-  real_assert(ctx_stack_index == ctx_stack_top);
-
-  /*
-  * If this context's line was specified in the input params, run all the
-  * tests in this context, and end the tests as soon as it's popped.
-  */
-  csBool is_requested = FALSE;
-  if (line == param.line) {
-    is_requested = TRUE;
-    param.line = 0;
-  }
-
-  /*
-  * When this is added to the stack, we can set it as the current line.
-  * (not strictly necessary, but good for bookkeeping?)
-  */
-  test.current_line = line;
-
-  /* Make sure we won't overflow the stack if we add another context */
-  if (ctx_stack_top + 1 >= cspec_ctx_stack_size_max) {
-    _cspec_warn_fn(line,
-      "context error:%c Too many nested contexts - maximum depth allowed: "
-      STR(cspec_ctx_stack_size_max)
-    );
-    _cspec_warn_fn(line,
-      "%cStack limit can be increased by defining cspec_ctx_stack_size_max"
-    );
-    return FALSE;
-  }
-
-  /* If we get here, we are entering a context for the first time. */
-  ctx_stack_index = ++ctx_stack_top;
-  ctx_stack[ctx_stack_index] = (Context) {
-    .desc = desc,
-    .printed = FALSE,
-    .requested_context = is_requested
-  };
-
-  return TRUE;
-}
-
-/* Called at the end of a context block in "context_end" */
-csBool _cspec_context_end(int line) {
-
-  /*
-  * If we're at the end of a context, we want to pop it off the stack if we
-  * didn't actually run any tests in this pass. Otherwise, return false to
-  * keep executing within this context.
-  */
-  if (test.in_progress) {
-    return FALSE;
-  }
-
-  /*
-  * Sanity check - this generally shouldn't be possible to hit?
-  */
-  /*
-  assert(test.current_line < line);
-  if (test.current_line >= line) {
-    return FALSE;
-  }
-  */
-
-  /*
-  * Update to the next line, because the context begin and end statements
-  * should actually be on the same line.
-  *
-  * This will usually make the line value go down (unless the context is
-  * empty), which is ok because as long as it's above the context line
-  * the entire block will be skipped.
-  */
-  test.current_line = line + 1;
-
-  /*
-  * Once we pop a specifically requested context, end the tests.
-  * If we're in verbose mode, we want to still go thorugh them all to print
-  * the descriptions of un-run tests.
-  */
-  if (ctx_stack[ctx_stack_top].requested_context) {
-    param.line = -1;
-  }
-
-  /* Make sure we're not trying to pop the stack root */
-  real_assert(ctx_stack_top != 0);
-
-  /* Pop the context from the stack */
-  ctx_stack_index = --ctx_stack_top;
-
-  /*
-  * True here to force a return after executing a context when no tests were
-  * actually executed, either because it's empty or all the tests have already
-  * finished. We don't want to continue to the next test block if this context
-  * had allocated or connected to something exterlal.
-  * 
-  * TODO: This should probably still be better handled in case there is any test
-  * cleanup code after all the contexts, ex, to clear memory allocated somewhere
-  * other than cspec's allocator. If this would return true here, instead set a
-  * flag that prevents all other tests from running but doesn't cancel execution
-  * of the describe function (closing statements should still be run, but after
-  * blocks should not).
-  */
-  return TRUE;
-}
-
-/* Called between each test group when all passes on a function are completed */
-static void context_clear_stack(void) {
-  ctx_stack_top = 0;
-  ctx_stack_index = 0;
-}
 
 /*----------------------------------------------------------------------------*\
   Output Printing/Formatting
 \*----------------------------------------------------------------------------*/
+#if 1
 
-static int print_headers(
+static void print_headers(
   int desc_color, PrintLevel desc_level, const char* to_append
 ) {
-
   if (!test.printed_filename) {
     cspec_out_str(test.suite->header);
     _cspec_out_print(CONCOL_Purple);
@@ -1217,26 +658,25 @@ static int print_headers(
   }
 
   Context* ctx;
-  int level = 2;
-  for (int i = 1; i <= ctx_stack_top; ++i) {
-    ctx = &ctx_stack[i];
+  int indent = 2;
+  for (int i = 1; i <= test.ctx.top; ++i) {
+    ctx = &test.ctx.stack[i];
     if (!ctx->printed) {
-      cspec_out_pad(param.tabsize * level, ' ');
+      cspec_out_pad(param.tabsize * indent, ' ');
       cspec_out_str(ctx->desc);
       _cspec_out_print(CONCOL_Cyan);
       ctx->printed = TRUE;
     }
-    ++level;
+    ++indent;
   }
 
   if (test.printed_description < desc_level) {
-    cspec_out_pad(param.tabsize * level, ' ');
+    cspec_out_pad(param.tabsize * indent, ' ');
 
     if (!test.in_progress) {
       cspec_out_str("pre-test");
       cspec_out_print();
-      test.printed_description = PRINTED;
-
+      test.printed_description = P_ERROR;
     } else {
       cspec_out_str(test.description);
       cspec_out_str(to_append); /* may be null */
@@ -1245,77 +685,76 @@ static int print_headers(
     }
   }
 
-  return level + 1;
+  csUint new_tabstop = param.tabsize * (indent + 1);
+  if (test.out.tabstop < new_tabstop) {
+    test.out.tabstop = new_tabstop;
+  }
+}
+
+void cspec_log_start(Status status) {
+  ConsoleColor color;
+
+  switch (status) {
+    case S_NOMINAL: color = CONCOL_bWhite; break;
+    case S_WARNING: color = CONCOL_Yellow; break;
+    case S_FAILURE: color = CONCOL_Red; break;
+    case S_MEMFAIL: color = CONCOL_Red; break;
+    case S_ASSERTS: color = CONCOL_Red; break;
+    default: color = CONCOL_White; break;
+  }
+
+  PrintLevel level = status == S_NOMINAL ? P_LOGGED : P_ERROR;
+  print_headers(color, level, NULL);
+  cspec_out_pad(test.out.tabstop, ' ');
+}
+
+void _cspec_log(int status, int line, const void* mem, const char* message) {
+  if (status == S_NOMINAL) {
+    if ((test.current_line && test.current_line > line)
+    ||  (status == S_NOMINAL && param.verbose < V_NOTES)
+    ) {
+      return;
+    }
+  }
+
+  cspec_log_start(status);
+
+  if (status == S_MEMFAIL) {
+    cspec_out_str("memory error: ");
+  } else if (line > 0) {
+    cspec_out_fmt("Line {}:%c ");
+    cspec_out_int(line);
+  }
+
+  cspec_out_str(message);
+
+  if (status != S_WARNING) {
+    cspec_out_print();
+  } else {
+    ConsoleColor color = test.pass.warned ? CONCOL_Yellow : CONCOL_bYellow;
+    _cspec_out_print(color);
+  }
+
+  if (mem) {
+    test.out.tabstop += param.tabsize;
+    _cspec_out_memory(mem);
+    test.out.tabstop -= param.tabsize;
+  }
+
+  if (param.padding) cspec_out_print();
+
+  if (test.in_progress) {
+    if (status == S_FAILURE && !test.pass.expect_fail) {
+      test.pass.failed = TRUE;
+    } else if (status == S_MEMFAIL && !test.pass.expect_memory_error) {
+      test.pass.memory_error = TRUE;
+    }
+  }
 }
 
 void cspec_print(const char* message) {
   cspec_out_str(message);
   cspec_out_print();
-}
-
-void _cspec_log_fn(int line, const char* message) {
-  if ((test.current_line && test.current_line >= line)
-  || param.verbose < V_NOTES
-  ) {
-    return;
-  }
-  int level = print_headers(CONCOL_bWhite, LOGGED, NULL);
-  cspec_out_pad(param.tabsize * level, ' ');
-  cspec_out_fmt("line {}:%c {}");
-  cspec_out_int(line);
-  cspec_out_str(message);
-  cspec_out_print();
-}
-
-void _cspec_warn_fn(int line, const char* message) {
-  if (test.current_line && test.current_line > line) {
-    return;
-  }
-  int level = print_headers(CONCOL_Yellow, LOGGED, NULL);
-  cspec_out_pad(param.tabsize * level, ' ');
-  cspec_out_fmt("line {}:%c {}");
-  cspec_out_int(line);
-  cspec_out_str(message);
-  if (test.pass.warned) {
-    _cspec_out_print(CONCOL_Yellow);
-  } else {
-    _cspec_out_print(CONCOL_bYellow);
-    if (!test.pass.warned) ++test.count_warnings;
-  }
-  test.pass.warned = TRUE;
-}
-
-static int test_error_no_fail(const char* message, csBool is_mem_err) {
-  int level = print_headers(CONCOL_Red, PRINTED, NULL);
-  cspec_out_pad(param.tabsize * level, ' ');
-  if (is_mem_err) cspec_out_str("memory error: ");
-  cspec_out_str(message);
-  cspec_out_print();
-  if (param.padding) cspec_out_print();
-  return level;
-}
-
-void _cspec_error_fn(const char* message) {
-  if (test.in_progress) {
-    if (!test.pass.expect_fail) {
-      test_error_no_fail(message, FALSE);
-    }
-    test.pass.failed = TRUE;
-  }
-}
-
-static int _cspec_error_mem(const char* message, const MemoryRecord* record) {
-  int level = 0;
-  if (test.in_progress) {
-    if (!test.pass.expect_memory_error) {
-      level = test_error_no_fail(message, TRUE);
-      if (record) {
-        memory_print_record(record, level + 1);
-      }
-    }
-    test.pass.expect_memory_error = TRUE;
-  }
-  return level;
 }
 
 /*----------------------------------------------------------------------------*\
@@ -1482,19 +921,19 @@ void _cspec_error_typed(
   const char* t_arg8, const void* arg8,
   const char* t_arg9, const void* arg9
 ) {
+  csBool test_fail_prev = test.pass.failed;
+
   if (!test.in_progress) return;
   test.pass.failed = TRUE;
   if (test.pass.expect_fail) return;
 
-  int level = print_headers(CONCOL_Red, PRINTED, NULL);
-  if (test.out.indent) {
-    cspec_out_pad(test.out.indent, ' ');
-  }
-  else {
-    cspec_out_pad(param.tabsize * level, ' ');
+  print_headers(CONCOL_Red, P_ERROR, NULL);
+
+  cspec_out_pad(test.out.tabstop, ' ');
+  if (!test_fail_prev) {
     cspec_out_fmt("line {}: ");
     cspec_out_int(line);
-    test.out.indent = test.out.index;
+    test.out.tabstop = test.out.index;
   }
   cspec_out_str(pre);
 
@@ -1520,6 +959,569 @@ finish:
   /* print empty line for padding */
   if (param.padding) cspec_out_print();
 }
+#endif
+
+/*----------------------------------------------------------------------------*\
+  Test Context
+\*----------------------------------------------------------------------------*\
+* A test context allows pre-test setup to be shared between multiple tests.
+* Variables can be created and accessed within the tests, and other setup can
+* be performed before running the tests. After each test, the test group
+* function is exited and re-entered, meaning the context is recreated for every
+* test (ie, incrementing a shared value in one test will not affect the next
+* test), and after the context is passed, the setup won't be run again for any
+* tests that follow it.
+*/
+#if 1
+
+/*
+* To allow nested contexts, we need a stack... the stack persists for the whole
+* test group (between multiple calls of the group function), and is used to
+* keep track of
+*/
+
+//static Context ctx_stack[cspec_ctx_stack_size_max] = {
+//  {
+//    .desc = "<root context>",
+//    .printed = FALSE,
+//    .requested_context = FALSE,
+//  }
+//};
+
+/*
+* Iterator through the stack.
+* This is reset to the root between each each call to the test function.
+*/
+//static int ctx_stack_index = 0;
+
+/*
+* Index of the top of the stack.
+* The stack is cleared between each test group. Root node cannot be popped.
+*/
+//static int ctx_stack_top = 0; // rename to ctx_stack_top
+
+/* Called whenever the test enters a "context()" block */
+csBool _cspec_context_begin(int line, const char* desc) {
+
+  /*
+  * If we are currently executing a test, skip the context (allow previous
+  * contexts to close out their post-test statements)
+  */
+  if (test.in_progress) {
+    return FALSE;
+  }
+
+  /*
+  * On each pass of the test function, we have to walk up the stack. If our
+  * context is already there, don't create a duplicate of it.
+  */
+  // TODO: This seems unreliable, what if two contexts have an identical
+  //    description, can they get optimized into one string pool?
+  //    Use __COUNT__ instead?
+  if (test.ctx.index < test.ctx.top
+  &&  test.ctx.stack[test.ctx.index + 1].desc == desc
+  ) {
+    ++test.ctx.index;
+    return TRUE;
+  }
+
+  /*
+  * If we're completing execution of the context, we expect it to be at the
+  * top of the stack
+  */
+  if (test.ctx.stack[test.ctx.index].desc == desc) {
+    return TRUE;
+  }
+
+  /*
+  * If we're not on the stack anymore, and the current test line is past our
+  * context, we've completed the tests in it and can skip it.
+  */
+  if (test.current_line > line) {
+    return FALSE;
+  }
+
+  /*
+  * Any other context on the stack should still be open (and thus already
+  * passed by the stack ptr), or have already closed out and be gone.
+  */
+  real_assert(test.ctx.index == test.ctx.top);
+
+  /*
+  * If this context's line was specified in the input params, run all the
+  * tests in this context, and end the tests as soon as it's popped.
+  */
+  csBool is_requested = FALSE;
+  if (line == param.line) {
+    is_requested = TRUE;
+    param.line = 0;
+  }
+
+  /*
+  * When this is added to the stack, we can set it as the current line.
+  * (not strictly necessary, but good for bookkeeping?)
+  */
+  test.current_line = line;
+
+  /* Make sure we won't overflow the stack if we add another context */
+  if (test.ctx.top + 1 >= cspec_max_context_depth) {
+    _cspec_log(S_WARNING, line, NULL,
+      "context error:%c Too many nested contexts - maximum depth allowed: "
+      STR(cspec_max_context_depth)
+    );
+    _cspec_log(S_WARNING, line, NULL,
+      "%cStack limit can be increased by defining cspec_max_context_depth"
+    );
+    return FALSE;
+  }
+
+  /* If we get here, we are entering a context for the first time. */
+  test.ctx.index = ++test.ctx.top;
+  test.ctx.stack[test.ctx.index] = (Context){
+    .desc = desc,
+    .printed = FALSE,
+    .requested_context = is_requested
+  };
+
+  return TRUE;
+}
+
+/* Called at the end of a context block in "context_end" */
+csBool _cspec_context_end(int line) {
+
+  /*
+  * If we're at the end of a context, we want to pop it off the stack if we
+  * didn't actually run any tests in this pass. Otherwise, return false to
+  * keep executing within this context.
+  */
+  if (test.in_progress) {
+    return FALSE;
+  }
+
+  /*
+  * Sanity check - this generally shouldn't be possible to hit?
+  */
+  /*
+  assert(test.current_line < line);
+  if (test.current_line >= line) {
+    return FALSE;
+  }
+  */
+
+  /*
+  * Update to the next line, because the context begin and end statements
+  * should actually be on the same line.
+  *
+  * This will usually make the line value go down (unless the context is
+  * empty), which is ok because as long as it's above the context line
+  * the entire block will be skipped.
+  */
+  test.current_line = line + 1;
+
+  /*
+  * Once we pop a specifically requested context, end the tests.
+  * If we're in verbose mode, we want to still go thorugh them all to print
+  * the descriptions of un-run tests.
+  */
+  if (test.ctx.stack[test.ctx.top].requested_context) {
+    param.line = -1;
+  }
+
+  /* Make sure we're not trying to pop the stack root */
+  real_assert(test.ctx.top != 0);
+
+  /* Pop the context from the stack */
+  test.ctx.index = --test.ctx.top;
+
+  /*
+  * True here to force a return after executing a context when no tests were
+  * actually executed, either because it's empty or all the tests have already
+  * finished. We don't want to continue to the next test block if this context
+  * had allocated or connected to something exterlal.
+  *
+  * TODO: This should probably still be better handled in case there is any test
+  * cleanup code after all the contexts, ex, to clear memory allocated somewhere
+  * other than cspec's allocator. If this would return true here, instead set a
+  * flag that prevents all other tests from running but doesn't cancel execution
+  * of the describe function (closing statements should still be run, but after
+  * blocks should not).
+  */
+  return TRUE;
+}
+#endif
+
+/*----------------------------------------------------------------------------*\
+  Memory Testing
+\*----------------------------------------------------------------------------*/
+#if 1
+
+static csBool memory_check_fence(MemoryRecord* record) {
+  for (csSize i = 0; i < memory_size_fence; ++i) {
+    if ('b' != record->block[i]
+    ||  'e' != record->block[i + memory_size_fence + record->size]
+    ) {
+      return FALSE;
+    }
+  }
+  return TRUE;
+}
+
+static MemoryRecord* memory_record_from_ptr(const void* ptr) {
+  for (csUint i = 0; i < test.pass.count_mallocs; ++i) {
+    MemoryRecord* rec = &test.mem.records[i];
+    if (rec->ptr == ptr) {
+      return rec;
+    }
+  }
+  return NULL;
+}
+
+static csBool memory_test_unused() {
+  return test.pass.count_mallocs == 0
+      && test.pass.count_frees == 0
+      && test.pass.force_malloc_null == M_NORMAL
+      && test.pass.force_realloc_move == M_NORMAL
+      && test.pass.expect_memory_error == FALSE;
+}
+
+static void memory_test_reset(csBool force) {
+  /* We can usually skip the reset if memory testing wasn't being used */
+  if (force == FALSE && memory_test_unused()) {
+    return;
+  }
+
+  test.mem.ptr = memory_size_barrier;
+  csByte* arena_start = test.mem.buffer + memory_size_barrier;
+  csByte* end_barrier = arena_start + cspec_max_memory_pool_size;
+  cspec_memset(test.mem.buffer, 0xFF, memory_size_barrier);
+  cspec_memset(arena_start, 'X', cspec_max_memory_pool_size);
+  cspec_memset(end_barrier, 0xFF, memory_size_barrier);
+
+  csSize records_size = sizeof(MemoryRecord) * cspec_max_memory_allocs;
+  cspec_memset(test.mem.records, 0x00, records_size);
+}
+
+static void memory_final_checks(void) {
+
+  /* No memory operations took place during this test (no mallocs or frees) */
+  if (memory_test_unused()) {
+    return;
+  }
+
+  /* Check barrier fences */
+  for (csSize i = 0; i < memory_size_barrier; ++i) {
+    if (0xFF != test.mem.buffer[i]
+    ||  0xFF != test.mem.buffer[i + memory_size_barrier + memory_size_max]
+    ) {
+      _cspec_log(S_MEMFAIL, 0, NULL, "after: arena barrier broken");
+    }
+  }
+
+  /* Validate all memory records */
+  for (csSize i = 0; i < test.pass.count_mallocs; ++i) {
+    MemoryRecord* record = &test.mem.records[i];
+    csByte* block = record->block + memory_size_fence;
+
+    /* Ensure all fences are intact */
+    if (!memory_check_fence(record)) {
+      _cspec_log(S_MEMFAIL, 0, record, "after: detected buffer over/underrun");
+    }
+
+    /* Ensure memory hasn't been modified after free */
+    if (record->is_free) {
+      for (csSize j = 0; j < record->size; ++j) {
+        if (block[j] != 'F') {
+          _cspec_log(S_MEMFAIL, 0, record, "after: memory modified after free");
+        }
+      }
+
+    /* Another check for freeing records */
+    } else {
+      _cspec_log(S_MEMFAIL, 0, record, "after: allocated memory not freed");
+    }
+  }
+
+  /* Ensure malloc / free parity */
+  if (test.pass.count_mallocs != test.pass.count_frees) {
+    _cspec_log(S_MEMFAIL, 0, NULL, "after: mismatched malloc/free calls");
+    if (test.in_progress) {
+      if (!test.pass.expect_memory_error) {
+        cspec_out_pad(test.out.tabstop + 21, ' ');
+        cspec_out_fmt("mallocs: {}, frees: {}%n");
+        cspec_out_int(test.pass.count_mallocs);
+        cspec_out_int(test.pass.count_frees);
+        cspec_out_print();
+      }
+    }
+  }
+
+  /* Ensure malloc was called if it was asked to fail */
+  if (test.pass.force_malloc_null >= M_HAPPENED
+  && !test.pass.count_expected_malloc_fails
+  ) {
+    /*
+    * causes regular error rather than memory error, since this is a failure
+    * within the test design rather than memory actually breaking (ie, using
+    * `expect(memory_error)` will not succeed if you forget to call malloc)
+    */
+    _cspec_log(S_FAILURE, 0, NULL, 
+      "memory error: after: malloc fail requested, but never called"
+    );
+  }
+}
+
+void* cspec_malloc(csSize size) {
+
+  /* Zero-size malloc or realloc is implementation dependent */
+  if (size == 0) {
+    _cspec_log(S_MEMFAIL, 0, NULL,
+      "malloc: calling malloc with a zero size is undefined"
+    );
+    return NULL;
+  }
+
+  /* Fail the allocation if the user requested it, count the failures */
+  if (test.pass.force_malloc_null >= M_ONCE) {
+    if (test.pass.force_malloc_null == M_ONCE) {
+      test.pass.force_malloc_null = M_HAPPENED;
+    }
+    ++test.pass.count_expected_malloc_fails;
+    return NULL;
+  }
+
+  /* bbbbbbbXXXXXXXXXXXXXXXXeeeeeee*/
+  csSize next = test.mem.ptr + memory_size_fence*2 + size;
+
+  if (next > memory_size_full + memory_size_barrier) {
+    test.pass.expect_memory_error = FALSE;
+    _cspec_log(S_MEMFAIL, 0, NULL,
+      "malloc: ran out of test memory space! Increase limit from "
+      STR(cspec_max_memory_pool_size)" bytes."
+    );
+
+    return NULL;
+  }
+
+  if (test.pass.count_mallocs >= cspec_max_memory_allocs) {
+    test.pass.expect_memory_error = FALSE;
+    _cspec_log(S_MEMFAIL, 0, NULL,
+      "malloc: ran out of test memory allocations! Increase limit from "
+      STR(cspec_max_memory_allocs)" allocations."
+    );
+
+    return NULL;
+  }
+
+  MemoryRecord* record = test.mem.records + test.pass.count_mallocs;
+
+  /* If this isn't the first allocation, validate the fence before it */
+  if (test.mem.ptr > memory_size_barrier) {
+    csSize fence = test.mem.ptr - memory_size_fence;
+    for (; fence < test.mem.ptr; ++fence) {
+      if (test.mem.buffer[fence] != 'e') {
+        _cspec_log(S_MEMFAIL, 0, record - 1, "malloc: preceeding fence broken");
+        return NULL;
+      }
+    }
+  }
+
+  record->size = size;
+  record->block = test.mem.buffer + test.mem.ptr;
+  record->ptr = record->block + memory_size_fence;
+  record->is_free = FALSE;
+  cspec_memset(record->block,       'b', memory_size_fence);
+  cspec_memset(record->ptr,         'N', size);
+  cspec_memset(record->ptr + size,  'e', memory_size_fence);
+
+  test.mem.ptr = next;
+  ++test.pass.count_mallocs;
+
+  return record->ptr;
+}
+
+void cspec_free(void* mem_) {
+  csByte* const mem = mem_;
+
+  /* free(NULL) is a valid NOP */
+  if (mem == NULL) {
+    return;
+  }
+
+  /* check for memory outside of our bounds */
+  csByte* buf_end = test.mem.buffer + memory_size_full - memory_size_barrier;
+  if (mem < test.mem.buffer
+  ||  mem + memory_size_fence*2 >= buf_end
+  ) {
+    MemoryRecord tmp = {
+      .block = mem - memory_size_fence, .ptr = mem, .size = 1, .is_free = TRUE
+    };
+    _cspec_log(S_MEMFAIL, 0, &tmp, "free: invalid pointer, out of bounds");
+    return;
+  }
+
+  /* check if the pointer is in our allocated pointers list */
+  MemoryRecord* record = memory_record_from_ptr(mem);
+
+  if (record == NULL) {
+    MemoryRecord tmp = {
+      .block = mem - memory_size_fence, .ptr = mem, .size = 1, .is_free = TRUE
+    };
+    _cspec_log(S_MEMFAIL, 0, &tmp, "free: invalid pointer, not malloc result");
+    return;
+  }
+
+  /* check for double-free */
+  if (record->is_free) {
+    _cspec_log(S_MEMFAIL, 0, record, "free: pointer already freed");
+  }
+
+  /* check fences */
+  if (!memory_check_fence(record)) {
+    _cspec_log(S_MEMFAIL, 0, record, "free: broken fence");
+  }
+
+  /* free the memory */
+  cspec_memset(record->ptr, 'F', record->size);
+  record->is_free = TRUE;
+  ++test.pass.count_frees;
+}
+
+void* cspec_calloc(csSize ct, csSize sel) {
+  csByte* ret = cspec_malloc(ct * sel);
+  if (!ret) return NULL;
+  cspec_memset(ret, 0, ct * sel);
+  return ret;
+}
+
+void* cspec_realloc(void* mem_, csSize nsize) {
+  csByte* const mem = mem_;
+
+  /* realloc(NULL, size) is a passthrough for malloc(size) */
+  if (mem == NULL) {
+    return cspec_malloc(nsize);
+  }
+
+  /* No previous blocks allocated, memory block has no matches (bad pointer) */
+  if (test.pass.count_mallocs == 0) {
+    _cspec_log(S_MEMFAIL, 0, NULL, "realloc: non-null on first invocation");
+    return cspec_malloc(nsize);
+  }
+
+  MemoryRecord* record = memory_record_from_ptr(mem);
+
+  /* Memory block has no valid matches (bad pointer) */
+  if (record == NULL) {
+    MemoryRecord tmp = {
+      .block = mem - memory_size_fence, .ptr = mem, .size = 1, .is_free = TRUE
+    };
+    _cspec_log(S_MEMFAIL, 0, &tmp, "realloc: invalid pointer (not from malloc)");
+    return NULL;
+  }
+
+  /* Always validate the fence */
+  if (!memory_check_fence(record)) {
+    _cspec_log(S_MEMFAIL, 0, record, "realloc: broken fence");
+    return NULL;
+  }
+
+  csBool last_record = record == &test.mem.records[test.pass.count_mallocs - 1];
+
+  /* If always-move is enabled, skip shrink operations */
+  if (test.pass.force_realloc_move < M_ONCE) {
+
+    /* Same size, do nothing */
+    if (nsize == record->size) {
+      return mem;
+    }
+
+    /* Any block can be resized down */
+    if (nsize < record->size) {
+      csSize diff = record->size - nsize;
+      cspec_memset(record->ptr + nsize, 'e', memory_size_fence);
+      cspec_memset(record->ptr + record->size + memory_size_fence, 'F', diff);
+      if (last_record) {
+        test.mem.ptr -= diff;
+      }
+      record->size = nsize;
+      return mem;
+    }
+  }
+
+  /* Only the most recent block can be embiggened, if not it, allocate here */
+  /* Also perform the move if the caller enabled always-move option */
+  if (!last_record || test.pass.force_realloc_move >= M_ONCE) {
+    void* ret = cspec_malloc(nsize);
+
+    if (!ret) {
+      _cspec_log(S_MEMFAIL, 0, NULL, "realloc: malloc failed in realloc");
+      return NULL;
+    }
+
+    if (test.pass.force_realloc_move == M_ONCE) {
+      test.pass.force_realloc_move = M_HAPPENED;
+    }
+
+    cspec_memcpy(ret, record->ptr, record->size);
+    cspec_free(record->ptr);
+    return ret;
+  }
+
+  /* At this point the record is the last one and needs to be grown */
+
+  /* Realloc can also fail to increase the size, check for force fails */
+  if (test.pass.force_malloc_null >= M_ONCE) {
+    if (test.pass.force_malloc_null == M_ONCE) {
+      test.pass.force_malloc_null = M_HAPPENED;
+    }
+    ++test.pass.count_expected_malloc_fails;
+    return NULL;
+  }
+
+  /* Calculate the next ptr value */
+  csSize next = test.mem.ptr + (nsize - record->size);
+
+  if (next > memory_size_full + memory_size_barrier) {
+    test.pass.expect_memory_error = FALSE;
+    _cspec_log(S_MEMFAIL, 0, NULL,
+      "malloc: ran out of test memory space! Increase limit from "
+      STR(cspec_max_memory_pool_size)" bytes."
+    );
+    return NULL;
+  }
+
+  cspec_memset(record->ptr + nsize, 'e', memory_size_fence);
+  cspec_memset(record->ptr + record->size, 'N', nsize - record->size);
+
+  record->size = nsize;
+  test.mem.ptr = next;
+
+  return mem;
+}
+#endif
+
+/*----------------------------------------------------------------------------*\
+  Assertion Handling
+\*----------------------------------------------------------------------------*/
+
+void cspec_assert(csBool assertion) {
+
+  real_assert(test.in_progress);
+  if (assertion) return;
+  test.pass.critical = TRUE;
+
+  if (!test.pass.expect_assert) {
+    test.pass.expect_fail = FALSE;
+    _cspec_log(S_FAILURE, 0, NULL, "Assertion failed during test");
+    if (cspec_opt_print_backtrace) cspec_opt_print_backtrace();
+  }
+
+#ifdef CSPEC_USE_ASSERT_HANDLING
+  longjmp(test.pass.jump_buffer, 1);
+#else
+  _cspec_log(S_WARNING, 0, NULL, "Assertion was thrown, but handling is disabled");
+#endif
+
+}
 
 /*----------------------------------------------------------------------------*\
   Test Begin/End
@@ -1539,7 +1541,7 @@ csBool _cspec_begin(int line, const char* desc) {
 
   test.current_line = line;
   test.description = desc;
-  test.printed_description = NOT_PRINTED;
+  test.printed_description = P_CLEAR;
 
   /*
   * At this point, normally we'rd run the test, but if we have a specific test
@@ -1553,7 +1555,7 @@ csBool _cspec_begin(int line, const char* desc) {
     if (param.verbose == V_VERY || test.pass.skip) {
       /* Set test in progress temporarily just so it prints the title in blue */
       test.in_progress = TRUE;
-      print_headers(CONCOL_Blue, LOGGED, NULL);
+      print_headers(CONCOL_Blue, P_LOGGED, NULL);
     }
 
     test.in_progress = FALSE;
@@ -1583,27 +1585,27 @@ csBool _cspec_end(void) {
   ) {
     ++test.count_passed;
 
-    if (test.pass.count_expects == 0) {
-      print_headers(CONCOL_Yellow, LOGGED, " (not implemented)");
+    if (test.pass.count_expects == 0 && test.pass.count_mallocs == 0) {
+      print_headers(CONCOL_Yellow, P_LOGGED, " (not implemented)");
       ++test.count_warnings;
 
     } else if (param.verbose >= V_RUN || param.line) {
       csBool failed = test.pass.expect_fail;
       failed |= test.pass.expect_memory_error;
       const char* failnote = failed ? " (failed successfully)" : NULL;
-      print_headers(CONCOL_Green, LOGGED, failnote);
+      print_headers(CONCOL_Green, P_LOGGED, failnote);
     }
   } else {
     if (test.pass.expect_fail && !test.pass.failed) {
       test.pass.expect_fail = FALSE; /* clear this so it prints the error */
-      _cspec_error_fn("expected to fail, but succeeded instead");
+      _cspec_log(S_FAILURE, 0, NULL, "expected to fail, but succeeded instead");
     }
     if (test.pass.expect_assert && !test.pass.critical) {
       test.pass.expect_fail = FALSE;
-      _cspec_error_fn("expected an assert failure, but received none");
+      _cspec_log(S_FAILURE, 0, NULL, "expected an assert failure, but received none");
     }
     if (test.pass.expect_memory_error) {
-      _cspec_error_fn("expected memory errors, but none were found");
+      _cspec_log(S_FAILURE, 0, NULL, "expected memory errors, but none were found");
     }
   }
 
@@ -1632,7 +1634,7 @@ csBool _cspec_expect_to_fail(void) {
 
 static csBool memory_directive_warning(void) {
   if (param.skip_memory_test) {
-    _cspec_warn_fn(0xFFFFFFFF,
+    _cspec_log(S_WARNING, 0, NULL, 
       "warning: expecting memory errors, but memory testing is disabled"
     );
     test.pass.expect_fail = TRUE;
@@ -1663,7 +1665,7 @@ csBool _cspec_memory_malloc_null(csBool only_once) {
     test.pass.skip = TRUE;
     return !test.in_progress;
   } else
-    test.pass.force_malloc_null = only_once ? M_FAIL_ONCE : M_FAIL_ALWAYS;
+    test.pass.force_malloc_null = only_once ? M_ONCE : M_ALWAYS;
   return TRUE;
 }
 
@@ -1706,14 +1708,15 @@ static void before_group(const TestGroup* t) {
   test.printed_function = FALSE;
   test.function = t;
   test.current_line = 0;
-  real_assert(ctx_stack_top == 0);
+  real_assert(test.ctx.top == 0);
+  cspec_memset(&test.ctx, 0, sizeof(test.ctx));
 }
 
 static void before_pass(void) {
-  ctx_stack_index = 0;
   memory_test_reset(!param.skip_memory_test);
   cspec_memset(&test.pass, 0, sizeof(test.pass));
-  test.out.indent = 0;
+  test.ctx.index = 0;
+  test.out.tabstop = 0;
 }
 
 static void _cspec_run_group(const TestGroup* t) {
@@ -1726,7 +1729,7 @@ static void _cspec_run_group(const TestGroup* t) {
 
     test.in_function = TRUE;
 #ifdef CSPEC_USE_ASSERT_HANDLING
-    if (setjmp(test.jump_buffer) == 0)
+    if (setjmp(test.pass.jump_buffer) == 0)
 #endif
     t->group_fn();
     test.in_function = FALSE;
@@ -1735,8 +1738,6 @@ static void _cspec_run_group(const TestGroup* t) {
 
     _cspec_end();
   }
-
-  context_clear_stack();
 }
 
 void _cspec_run_suite(const TestSuite* suite) {

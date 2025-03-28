@@ -230,7 +230,7 @@ describe(memory) {
 
     it("causes a buffer overrun") {
       char* buffer = cspec_malloc(5);
-      cspec_assert(buffer);
+      expect(buffer != NULL);
       for (int i = 0; i <= 5; ++i) {
         buffer[i] = '!';
       }
