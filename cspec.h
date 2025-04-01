@@ -365,7 +365,7 @@ typedef struct TestSuite {
 *
 * \param expect(to_fail);
 */
-#define to_fail                   _cspec_expect_to_fail()
+#define to_fail                   _cspec_directive(1, 0)//_cspec_expect_to_fail()
 
 /*
 * \brief A pre-test directive telling the system to expect an assertion to fail.
@@ -379,8 +379,8 @@ typedef struct TestSuite {
 *
 * \param expect(assertion_failure);
 */
-#define assertion_failure         _cspec_expect_assertion_failure()
-#define to_assert                 _cspec_expect_assertion_failure()
+//#define assertion_failure         _cspec_expect_assertion_failure()
+#define to_assert                 _cspec_directive(2, __LINE__)//_cspec_expect_assertion_failure()
 
 /*
 * \brief Memory errors are treated differently from regular errors; a test
@@ -391,7 +391,7 @@ typedef struct TestSuite {
 *
 * \param expect(memory_errors);
 */
-#define memory_errors             _cspec_memory_expect_to_fail()
+#define memory_errors             _cspec_directive(3, 0)//_cspec_memory_expect_to_fail()
 
 /*
 * \brief Force the next call to malloc to return NULL. Only the first call to
@@ -402,9 +402,9 @@ typedef struct TestSuite {
 *
 * \param expect(null_malloc)
 */
-#define null_malloc               _cspec_memory_malloc_null(TRUE)
-#define malloc_failure            _cspec_memory_malloc_null(TRUE)
-#define malloc_to_fail            _cspec_memory_malloc_null(TRUE)
+//#define null_malloc               _cspec_memory_malloc_null(TRUE)
+//#define malloc_failure            _cspec_memory_malloc_null(TRUE)
+#define malloc_to_fail            _cspec_directive(4, 1)
 
 /*
 * \brief Force all remaining attempts to allocate memory for this test to fail.
@@ -414,9 +414,9 @@ typedef struct TestSuite {
 *
 * \param expect(null_mallocs)
 */
-#define null_mallocs              _cspec_memory_malloc_null(FALSE)
-#define malloc_failures           _cspec_memory_malloc_null(FALSE)
-#define malloc_to_always_fail     _cspec_memory_malloc_null(FALSE)
+//#define null_mallocs              _cspec_memory_malloc_null(FALSE)
+//#define malloc_failures           _cspec_memory_malloc_null(FALSE)
+#define malloc_to_always_fail     _cspec_directive(4, 0)//_cspec_memory_malloc_null(FALSE)
 
 /*
 * \brief Force realloc to always move memory for the remainder of the test, even
@@ -424,8 +424,8 @@ typedef struct TestSuite {
 *
 * \param expect(moving_realloc)
 */
-#define moving_realloc
-#define realloc_to_always_move
+#define realloc_to_move           _cspec_directive(5, 1)
+#define realloc_to_always_move    _cspec_directive(5, 0)
 
 //void cspec_realloc_always_moves(csBool enable);
 
@@ -808,14 +808,14 @@ typedef struct TestSuite {
 *
 * \param - `expect(malloc_count == 1);`
 */
-#define malloc_count _cspec_memory_malloc_count()
+#define malloc_count              _cspec_directive(6, 0)
 
 /*
 * \brief Gets the number of calls to free at this point in test execution
 *
 * \param - `expect(free_count == 1);`
 */
-#define free_count _cspec_memory_free_count()
+#define free_count                _cspec_directive(7, 0)
 
 void* cspec_malloc(csSize size);
 void  cspec_free(void* mem);
@@ -882,6 +882,12 @@ extern print_backtrace_fn cspec_opt_print_backtrace;
 * \brief Default backtrace function
 */
 void cspec_default_print_backtrace(void);
+
+/*
+* \brief Sets the execution line selector. This has the same behavior as passing
+*   an argument to the command line in the form ":#".
+*/
+void cspec_set_line(int line);
 
 /*
 * A few internal functions that can be used if convenient in an environment
@@ -1017,12 +1023,7 @@ void    _cspec_expcount(void);
 csBool  _cspec_context_begin(int line, const char* desc);
 csBool  _cspec_context_end(int line);
 void    _cspec_log(int status, int line, const void* mem, const char* message);
-csBool  _cspec_expect_to_fail(void);
-csBool  _cspec_expect_assertion_failure(void);
-csBool  _cspec_memory_expect_to_fail(void);
-csBool  _cspec_memory_malloc_null(csBool only_next);
-int     _cspec_memory_malloc_count(void);
-int     _cspec_memory_free_count(void);
+int     _cspec_directive(int mode, int param);
 void    cspec_out_memory(int line, const void* ptr);
 int     _cspec_run_all(int count, TestSuite* suites[], int argc, char* argv[]);
 void    _cspec_error_typed(int line, const char* pfix, const char* fmt,

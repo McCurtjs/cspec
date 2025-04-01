@@ -117,6 +117,17 @@ typedef enum MallocFailLevel {
   M_ALWAYS
 } MallocFailLevel;
 
+enum Directives {
+  D_NONE,
+  D_EXPECT_FAIL,
+  D_EXPECT_ASSERT,
+  D_EXPECT_MEMFAIL,
+  D_FORCE_MALLOC_NULL,
+  D_FORCE_REALLOC_MOVE,
+  D_COUNT_MALLOCS,
+  D_COUNT_FREES
+};
+
 static struct InputParams {
   int tabsize;              /* -t [n] */
   const char* file;         /* filename */
@@ -537,7 +548,7 @@ static void _cspec_out_print(ConsoleColor color) {
 #else
   /* find the color specifier if it was added into the string */
   char* c = test.out.buffer;
-  while (*c) {
+  for (csUint i = 0; *c && i < test.out.index; ++i) {
     if (*c == '\033') {
       /* set boldness flag */
       c[2] = color >= 40 ? '1' : '0';
@@ -703,18 +714,43 @@ void cspec_log_start(Status status) {
     default: color = CONCOL_White; break;
   }
 
-  PrintLevel level = status == S_NOMINAL ? P_LOGGED : P_ERROR;
+  PrintLevel level = (status == S_NOMINAL ? P_LOGGED : P_ERROR);
   print_headers(color, level, NULL);
   cspec_out_pad(test.out.tabstop, ' ');
 }
 
 void _cspec_log(int status, int line, const void* mem, const char* message) {
-  if (status == S_NOMINAL) {
-    if ((test.current_line && test.current_line > line)
-    ||  (status == S_NOMINAL && param.verbose < V_NOTES)
-    ) {
-      return;
+  if (test.in_progress) {
+    switch (status) {
+    case S_NOMINAL:
+      if (!param.verbose || (test.current_line && test.current_line >= line))
+        return;
+      break;
+
+    case S_WARNING:
+      if (test.current_line && test.current_line >= line) return;
+      test.pass.warned = TRUE;
+      break;
+
+    case S_FAILURE:
+      test.pass.failed = TRUE;
+      if (test.pass.expect_fail) return;
+      break;
+
+    case S_MEMFAIL:
+      test.pass.memory_error = TRUE;
+      if (test.pass.expect_memory_error) return;
+      break;
+
+    case S_ASSERTS:
+      test.pass.critical = TRUE;
+      if (test.pass.expect_assert) return;
+      break;
     }
+  }
+
+  if (line) {
+    test.out.tabstop = 0;
   }
 
   cspec_log_start(status);
@@ -722,17 +758,21 @@ void _cspec_log(int status, int line, const void* mem, const char* message) {
   if (status == S_MEMFAIL) {
     cspec_out_str("memory error: ");
   } else if (line > 0) {
-    cspec_out_fmt("Line {}:%c ");
+    cspec_out_fmt("Line {}: ");
     cspec_out_int(line);
+    test.out.tabstop = test.out.index;
+    cspec_out_str("%c");
+  } else if (status == S_WARNING) {
+    cspec_out_str("%c");
   }
 
   cspec_out_str(message);
 
-  if (status != S_WARNING) {
-    cspec_out_print();
-  } else {
+  if (status == S_WARNING) {
     ConsoleColor color = test.pass.warned ? CONCOL_Yellow : CONCOL_bYellow;
     _cspec_out_print(color);
+  } else {
+    cspec_out_print();
   }
 
   if (mem) {
@@ -742,14 +782,6 @@ void _cspec_log(int status, int line, const void* mem, const char* message) {
   }
 
   if (param.padding) cspec_out_print();
-
-  if (test.in_progress) {
-    if (status == S_FAILURE && !test.pass.expect_fail) {
-      test.pass.failed = TRUE;
-    } else if (status == S_MEMFAIL && !test.pass.expect_memory_error) {
-      test.pass.memory_error = TRUE;
-    }
-  }
 }
 
 void cspec_print(const char* message) {
@@ -1579,9 +1611,9 @@ csBool _cspec_end(void) {
 
   ++test.count;
 
-  if (!test.pass.failed   ^ test.pass.expect_fail
-  &&  !test.pass.critical ^ test.pass.expect_assert
-  &&  !test.pass.memory_error ^ test.pass.expect_memory_error
+  if (test.pass.failed   == test.pass.expect_fail
+  &&  test.pass.critical == test.pass.expect_assert
+  &&  test.pass.memory_error == test.pass.expect_memory_error
   ) {
     ++test.count_passed;
 
@@ -1626,70 +1658,55 @@ void _cspec_expcount(void) {
   Directives
 \*----------------------------------------------------------------------------*/
 
-csBool _cspec_expect_to_fail(void) {
-  if(!param.no_expect_fail)
-    test.pass.expect_fail = TRUE;
-  return TRUE;
-}
+int _cspec_directive(int mode, int value) {
+  switch (mode) {
 
-static csBool memory_directive_warning(void) {
-  if (param.skip_memory_test) {
-    _cspec_log(S_WARNING, 0, NULL, 
-      "warning: expecting memory errors, but memory testing is disabled"
-    );
-    test.pass.expect_fail = TRUE;
-    return TRUE;
-  }
-  return FALSE;
-}
+  case D_EXPECT_FAIL:
+    test.pass.expect_fail = !param.no_expect_fail;
+    break;
 
-csBool _cspec_expect_assertion_failure(void) {
-  test.pass.expect_assert = TRUE;
+  case D_EXPECT_ASSERT:
+    test.pass.expect_assert = TRUE;
 #ifndef CSPEC_USE_ASSERT_HANDLING
-  test_warn("Expected assertion failure, but handling is disabled");
+    _cspec_log(S_WARNING, value, NULL,
+      "expecting assertion failure, but handling is disabled"
+    );
 #endif
-  return TRUE;
-}
+    break;
 
-csBool _cspec_memory_expect_to_fail(void) {
-  if (memory_directive_warning()) {
-    test.pass.skip = TRUE;
-    return !test.in_progress;
-  } else if(!param.no_expect_fail)
-    test.pass.expect_memory_error = TRUE;
-  return TRUE;
-}
+  case D_EXPECT_MEMFAIL:
+    test.pass.expect_memory_error = !param.no_expect_fail;
+    break;
 
-csBool _cspec_memory_malloc_null(csBool only_once) {
-  if (memory_directive_warning()) {
-    test.pass.skip = TRUE;
-    return !test.in_progress;
-  } else
-    test.pass.force_malloc_null = only_once ? M_ONCE : M_ALWAYS;
-  return TRUE;
-}
+  case D_FORCE_MALLOC_NULL:
+    test.pass.force_malloc_null = value ? M_ONCE : M_ALWAYS;
+    break;
 
-int _cspec_memory_malloc_count(void) {
-  if (memory_directive_warning()) {
-    test.pass.skip = TRUE;
-    return -1;
+  case D_FORCE_REALLOC_MOVE:
+    test.pass.force_realloc_move = value ? M_ONCE : M_ALWAYS;
+    break;
+
+  case D_COUNT_MALLOCS:
+    return test.pass.count_mallocs;
+    break;
+
+  case D_COUNT_FREES:
+    return test.pass.count_frees;
+    break;
+
+  default:
+    real_assert(FALSE);
+    break;
   }
-  return test.pass.count_mallocs;
-}
 
-int _cspec_memory_free_count(void) {
-  if (memory_directive_warning()) {
-    test.pass.skip = TRUE;
-    return -1;
-  }
-  return test.pass.count_frees;
+  return 1;
 }
 
 /*----------------------------------------------------------------------------*\
   Test Runners
 \*----------------------------------------------------------------------------*/
 
-void test_set_line(int line) {
+void cspec_set_line(int line) {
   param.line = line;
 }
 

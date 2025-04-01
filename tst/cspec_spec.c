@@ -170,7 +170,7 @@ describe(memory) {
     }
 
     it("makes malloc return NULL once") {
-      expect(null_malloc);
+      expect(malloc_to_fail);
 
       char* buffer = cspec_malloc(5);
       expect(buffer == NULL);
@@ -181,7 +181,7 @@ describe(memory) {
     }
 
     it("makes malloc return NULL for the rest of the test") {
-      expect(null_mallocs);
+      expect(malloc_to_always_fail);
 
       char* buffer = cspec_malloc(5);
       expect(buffer == NULL);
@@ -215,7 +215,8 @@ describe(memory) {
     it("allocates memory and never frees") {
       char* test_mem = cspec_malloc(42);
       const char copystr[] = "This allocates a string without deleting.";
-      const char* c_array_foreach_index(pc, i, copystr) test_mem[i] = *pc;
+      //const char* c_array_foreach_index(pc, i, copystr) test_mem[i] = *pc;
+      cspec_memcpy(test_mem, copystr, sizeof(copystr));
     }
 
     it("passes a bad pointer to realloc") {
@@ -271,11 +272,11 @@ describe(memory) {
     expect(to_fail);
 
     it("requests a null malloc, but doesn't call malloc") {
-      expect(null_malloc);
+      expect(malloc_to_fail);
     }
 
     it("requests rest of allocations to be NULL, but doesn't call malloc again") {
-      expect(null_mallocs);
+      expect(malloc_to_always_fail);
     }
 
   }
@@ -289,7 +290,7 @@ describe(assertion) {
 
   it("fails because of an assert") {
     //expect(to_fail);
-    expect(assertion_failure);
+    expect(to_assert);
     //test_log("Testing?");
     cspec_assert(FALSE);
   }
