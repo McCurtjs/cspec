@@ -589,7 +589,7 @@ csBool _cspec_mem_in_bounds(const csByte* p) {
       && p >= test.mem.buffer;
 }
 
-static void _cspec_log_memory_row(const csByte* row, csBool target) {
+static void _cspec_log_mem_row(const csByte* row, csBool target) {
   cspec_out_clear();
   cspec_out_pad(test.out.tabstop, ' ');
   cspec_out_fmt("{}{} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} ");
@@ -617,19 +617,18 @@ static void _cspec_log_memory_row(const csByte* row, csBool target) {
   cspec_out_print();
 }
 
-static void _cspec_log_record(const MemoryRecord* record) {
+static void _cspec_log_mem_record(const MemoryRecord* record) {
   csSize i = 0;
   while (i < record->size + memory_size_fence + 16) {
-    _cspec_log_memory_row(record->ptr + i - 16, i == 16);
+    _cspec_log_mem_row(record->ptr + i - 16, i == 16);
     i += 16;
   }
   if (param.padding) cspec_out_print();
 }
 
-static MemoryRecord* memory_record_from_ptr(const void* ptr);
-static void print_headers(int desc_color, PrintLevel desc_level, const char* to_append);
+static MemoryRecord* _cspec_mem_rec_from_ptr(const void* ptr);
 
-static void print_headers(
+static void _cspec_log_headers(
   int desc_color, PrintLevel desc_level, const char* to_append
 ) {
   if (!test.printed_filename) {
@@ -681,7 +680,7 @@ static void print_headers(
   }
 }
 
-void cspec_log_start(Status status) {
+static void _cspec_log_start(Status status) {
   ConsoleColor color;
 
   switch (status) {
@@ -694,8 +693,12 @@ void cspec_log_start(Status status) {
   }
 
   PrintLevel level = (status == S_NOMINAL ? P_LOGGED : P_ERROR);
-  print_headers(color, level, NULL);
+  _cspec_log_headers(color, level, NULL);
   cspec_out_pad(test.out.tabstop, ' ');
+}
+
+void cspec_log_start(void) {
+  _cspec_log_start(S_NOMINAL);
 }
 
 void _cspec_log(int status, int line, const void* mem, const char* message) {
@@ -732,7 +735,7 @@ void _cspec_log(int status, int line, const void* mem, const char* message) {
     test.out.tabstop = 0;
   }
 
-  cspec_log_start(status);
+  _cspec_log_start(status);
 
   csUint old_stop = test.out.tabstop;
 
@@ -762,17 +765,17 @@ void _cspec_log(int status, int line, const void* mem, const char* message) {
     test.out.tabstop = old_stop + param.tabsize;
 
     /* check if the pointer is in our allocated blocks list */
-    MemoryRecord* record = memory_record_from_ptr(mem);
+    MemoryRecord* record = _cspec_mem_rec_from_ptr(mem);
 
     if (param.padding) cspec_out_print();
 
     if (record) {
-      _cspec_log_record(record);
+      _cspec_log_mem_record(record);
     } else {
       const csByte* bytes = mem;
-      _cspec_log_memory_row(bytes - 16, FALSE);
-      _cspec_log_memory_row(bytes, TRUE);
-      _cspec_log_memory_row(bytes + 16, FALSE);
+      _cspec_log_mem_row(bytes - 16, FALSE);
+      _cspec_log_mem_row(bytes, TRUE);
+      _cspec_log_mem_row(bytes + 16, FALSE);
     }
 
     test.out.tabstop -= param.tabsize;
@@ -781,16 +784,11 @@ void _cspec_log(int status, int line, const void* mem, const char* message) {
   if (param.padding) cspec_out_print();
 }
 
-void cspec_print(const char* message) {
-  cspec_out_str(message);
-  cspec_out_print();
-}
-
 /*----------------------------------------------------------------------------*\
   Printing of typed values
 \*----------------------------------------------------------------------------*/
 
-static csBool resolve_param(const char* typ_N, const void* N) {
+static csBool _cspec_log_param(const char* typ_N, const void* N) {
 
   if (!typ_N) {
     return FALSE;
@@ -937,7 +935,7 @@ static csBool resolve_param(const char* typ_N, const void* N) {
   return TRUE;
 }
 
-void _cspec_error_typed(
+void _cspec_log_error(
   int line, const char* pre, const char* fmt,
   const char* t_arg0, const void* arg0,
   const char* t_arg1, const void* arg1,
@@ -956,7 +954,7 @@ void _cspec_error_typed(
   test.pass.failed = TRUE;
   if (test.pass.expect_fail) return;
 
-  print_headers(CONCOL_Red, P_ERROR, NULL);
+  _cspec_log_headers(CONCOL_Red, P_ERROR, NULL);
 
   cspec_out_pad(test.out.tabstop, ' ');
   if (!test_fail_prev) {
@@ -970,16 +968,16 @@ void _cspec_error_typed(
 
   cspec_out_fmt(fmt);
 
-  if (t_arg0) resolve_param(t_arg0, arg0);
-  if (t_arg1) resolve_param(t_arg1, arg1);
-  if (t_arg2) resolve_param(t_arg2, arg2);
-  if (t_arg3) resolve_param(t_arg3, arg3);
-  if (t_arg4) resolve_param(t_arg4, arg4);
-  if (t_arg5) resolve_param(t_arg5, arg5);
-  if (t_arg6) resolve_param(t_arg6, arg6);
-  if (t_arg7) resolve_param(t_arg7, arg7);
-  if (t_arg8) resolve_param(t_arg8, arg8);
-  if (t_arg9) resolve_param(t_arg9, arg9);
+  if (t_arg0) _cspec_log_param(t_arg0, arg0);
+  if (t_arg1) _cspec_log_param(t_arg1, arg1);
+  if (t_arg2) _cspec_log_param(t_arg2, arg2);
+  if (t_arg3) _cspec_log_param(t_arg3, arg3);
+  if (t_arg4) _cspec_log_param(t_arg4, arg4);
+  if (t_arg5) _cspec_log_param(t_arg5, arg5);
+  if (t_arg6) _cspec_log_param(t_arg6, arg6);
+  if (t_arg7) _cspec_log_param(t_arg7, arg7);
+  if (t_arg8) _cspec_log_param(t_arg8, arg8);
+  if (t_arg9) _cspec_log_param(t_arg9, arg9);
 
 finish:
 
@@ -1009,26 +1007,6 @@ finish:
 * keep track of
 */
 
-//static Context ctx_stack[cspec_ctx_stack_size_max] = {
-//  {
-//    .desc = "<root context>",
-//    .printed = FALSE,
-//    .requested_context = FALSE,
-//  }
-//};
-
-/*
-* Iterator through the stack.
-* This is reset to the root between each each call to the test function.
-*/
-//static int ctx_stack_index = 0;
-
-/*
-* Index of the top of the stack.
-* The stack is cleared between each test group. Root node cannot be popped.
-*/
-//static int ctx_stack_top = 0; // rename to ctx_stack_top
-
 /* Called whenever the test enters a "context()" block */
 csBool _cspec_context_begin(int line, const char* desc) {
 
@@ -1044,9 +1022,10 @@ csBool _cspec_context_begin(int line, const char* desc) {
   * On each pass of the test function, we have to walk up the stack. If our
   * context is already there, don't create a duplicate of it.
   */
-  // TODO: This seems unreliable, what if two contexts have an identical
-  //    description, can they get optimized into one string pool?
-  //    Use __COUNT__ instead?
+  /* TODO: This seems unreliable, what if two contexts have an identical
+  *    description, can they get optimized into one string pool?
+  *    Use __COUNT__ instead?
+  */
   if (test.ctx.index < test.ctx.top
   &&  test.ctx.stack[test.ctx.index + 1].desc == desc
   ) {
@@ -1184,7 +1163,7 @@ csBool _cspec_context_end(int line) {
 \*----------------------------------------------------------------------------*/
 #if 1
 
-static csBool memory_check_fence(MemoryRecord* record) {
+static csBool _cspec_mem_check_fence(MemoryRecord* record) {
   for (csSize i = 0; i < memory_size_fence; ++i) {
     if ('b' != record->block[i]
     ||  'e' != record->block[i + memory_size_fence + record->size]
@@ -1195,7 +1174,7 @@ static csBool memory_check_fence(MemoryRecord* record) {
   return TRUE;
 }
 
-static MemoryRecord* memory_record_from_ptr(const void* ptr) {
+static MemoryRecord* _cspec_mem_rec_from_ptr(const void* ptr) {
   for (csUint i = 0; i < test.pass.count_mallocs; ++i) {
     MemoryRecord* rec = &test.mem.records[i];
     if (rec->ptr == ptr || rec == ptr) {
@@ -1205,7 +1184,7 @@ static MemoryRecord* memory_record_from_ptr(const void* ptr) {
   return NULL;
 }
 
-static csBool memory_test_unused() {
+static csBool _cspec_mem_unused() {
   return test.pass.count_mallocs == 0
       && test.pass.count_frees == 0
       && test.pass.force_malloc_null == M_NORMAL
@@ -1213,9 +1192,9 @@ static csBool memory_test_unused() {
       && test.pass.expect_memory_error == FALSE;
 }
 
-static void memory_test_reset(csBool force) {
+static void _cspec_mem_reset(csBool force) {
   /* We can usually skip the reset if memory testing wasn't being used */
-  if (force == FALSE && memory_test_unused()) {
+  if (force == FALSE && _cspec_mem_unused()) {
     return;
   }
 
@@ -1230,10 +1209,10 @@ static void memory_test_reset(csBool force) {
   cspec_memset(test.mem.records, 0x00, records_size);
 }
 
-static void memory_final_checks(void) {
+static void _cspec_mem_check_final(void) {
 
   /* No memory operations took place during this test (no mallocs or frees) */
-  if (memory_test_unused()) {
+  if (_cspec_mem_unused()) {
     return;
   }
 
@@ -1252,7 +1231,7 @@ static void memory_final_checks(void) {
     csByte* block = record->block + memory_size_fence;
 
     /* Ensure all fences are intact */
-    if (!memory_check_fence(record)) {
+    if (!_cspec_mem_check_fence(record)) {
       _cspec_log(S_MEMFAIL, 0, record, "after: detected buffer over/underrun");
     }
 
@@ -1389,7 +1368,7 @@ void cspec_free(void* mem_) {
   }
 
   /* check if the pointer is in our allocated pointers list */
-  MemoryRecord* record = memory_record_from_ptr(mem);
+  MemoryRecord* record = _cspec_mem_rec_from_ptr(mem);
 
   if (record == NULL) {
     MemoryRecord tmp = {
@@ -1405,7 +1384,7 @@ void cspec_free(void* mem_) {
   }
 
   /* check fences */
-  if (!memory_check_fence(record)) {
+  if (!_cspec_mem_check_fence(record)) {
     _cspec_log(S_MEMFAIL, 0, record, "free: broken fence");
   }
 
@@ -1436,7 +1415,7 @@ void* cspec_realloc(void* mem_, csSize nsize) {
     return cspec_malloc(nsize);
   }
 
-  MemoryRecord* record = memory_record_from_ptr(mem);
+  MemoryRecord* record = _cspec_mem_rec_from_ptr(mem);
 
   /* Memory block has no valid matches (bad pointer) */
   if (record == NULL) {
@@ -1448,7 +1427,7 @@ void* cspec_realloc(void* mem_, csSize nsize) {
   }
 
   /* Always validate the fence */
-  if (!memory_check_fence(record)) {
+  if (!_cspec_mem_check_fence(record)) {
     _cspec_log(S_MEMFAIL, 0, record, "realloc: broken fence");
     return NULL;
   }
@@ -1556,7 +1535,7 @@ void cspec_assert(csBool assertion) {
   Test Begin/End
 \*----------------------------------------------------------------------------*/
 
-csBool _cspec_begin(int line, const char* desc) {
+csBool _cspec_test_begin(int line, const char* desc) {
 
   /* A test is currently in progress, just ignore this test for now */
   if (test.in_progress) {
@@ -1584,7 +1563,7 @@ csBool _cspec_begin(int line, const char* desc) {
     if (param.verbose == V_VERY || test.pass.skip) {
       /* Set test in progress temporarily just so it prints the title in blue */
       test.in_progress = TRUE;
-      print_headers(CONCOL_Blue, P_LOGGED, NULL);
+      _cspec_log_headers(CONCOL_Blue, P_LOGGED, NULL);
     }
 
     test.in_progress = FALSE;
@@ -1603,7 +1582,7 @@ csBool _cspec_end(void) {
   }
 
   if (!test.pass.failed && !param.skip_memory_test) {
-    memory_final_checks();
+    _cspec_mem_check_final();
   }
 
   ++test.count;
@@ -1615,14 +1594,14 @@ csBool _cspec_end(void) {
     ++test.count_passed;
 
     if (test.pass.count_expects == 0 && test.pass.count_mallocs == 0) {
-      print_headers(CONCOL_Yellow, P_LOGGED, " (not implemented)");
+      _cspec_log_headers(CONCOL_Yellow, P_LOGGED, " (not implemented)");
       ++test.count_warnings;
 
     } else if (param.verbose >= V_RUN || param.line) {
       csBool failed = test.pass.expect_fail;
       failed |= test.pass.expect_memory_error;
       const char* failnote = failed ? " (failed successfully)" : NULL;
-      print_headers(CONCOL_Green, P_LOGGED, failnote);
+      _cspec_log_headers(CONCOL_Green, P_LOGGED, failnote);
     }
   } else {
     if (test.pass.expect_fail && !test.pass.failed) {
@@ -1643,11 +1622,11 @@ csBool _cspec_end(void) {
   return TRUE;
 }
 
-csBool _cspec_active(void) {
+csBool _cspec_test_active(void) {
   return test.in_progress;
 }
 
-void _cspec_expcount(void) {
+void _cspec_test_expcount(void) {
   ++test.pass.count_expects;
 }
 
@@ -1655,7 +1634,7 @@ void _cspec_expcount(void) {
   Directives
 \*----------------------------------------------------------------------------*/
 
-int _cspec_directive(int mode, int value) {
+int _cspec_test_directive(int mode, int value) {
   switch (mode) {
 
   case D_EXPECT_FAIL:
@@ -1727,7 +1706,7 @@ static void before_group(const TestGroup* t) {
 }
 
 static void before_pass(void) {
-  memory_test_reset(!param.skip_memory_test);
+  _cspec_mem_reset(!param.skip_memory_test);
   cspec_memset(&test.pass, 0, sizeof(test.pass));
   test.ctx.index = 0;
   test.out.tabstop = 0;
@@ -1944,12 +1923,9 @@ int _cspec_run_all(int count, TestSuite* suites[], int argc, char* argv[]) {
 
 #define FRAMES 5
 
-__declspec(noinline) void cspec_default_print_backtrace(void) {
+extern void cspec_default_print_backtrace(void) {
 
 #ifdef CSPEC_MSVC
-  // Make it work with built-in cspec logging
-  //test_log("blah!!!!!!!\n");
-
   void* traces[FRAMES];
   CaptureStackBackTrace(2, FRAMES, traces, NULL);
 
@@ -1965,10 +1941,9 @@ __declspec(noinline) void cspec_default_print_backtrace(void) {
 
   for (int i = 0; i < FRAMES; ++i) {
     SymFromAddr(process, (DWORD64)traces[i], 0, info);
-    cspec_print(info->Name);
+    cspec_out_str(info->Name);
+    cspec_out_print();
   }
 #endif
-
-  // Todo: why is clang pretending to be Microsoft too?
 
 }

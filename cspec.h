@@ -261,11 +261,7 @@ typedef struct TestSuite {
 *   somewhat useful for debugging with conditional statements. Would like
 *   to replace with a version that can do dynamic strings.
 */
-#define test_log(message)         _test_log(message)
 #define cspec_log(message)        _cspec_log(0, __LINE__, NULL, message)
-
-/* \brief An alias for `test_log` */
-#define test_note(message)        _test_log(message)
 
 /*
 * \brief Logs a warning message in the console output. The message is of higher
@@ -275,7 +271,6 @@ typedef struct TestSuite {
 * \param warning - String Literal: The warning to be printed. Same
 *   restrictions as with test_log.
 */
-#define test_warn(warning)        _test_warn(warning)
 #define cspec_warn(warning)       _cspec_log(1, __LINE__, NULL, warning)
 
 /*
@@ -283,7 +278,6 @@ typedef struct TestSuite {
 *
 * \param issue - String Literal: The error to print.
 */
-#define test_fail(issue)          _test_fail(issue)
 #define cspec_fail(issue)         _cspec_log(2, __LINE__, NULL, issue)
 
 /*
@@ -294,7 +288,6 @@ typedef struct TestSuite {
 *   call, will print the whole allocated segment. Any other pointer will print
 *   just three rows of 16 bytes (starting 16 before the requested pointer).
 */
-//#define test_log_memory(ptr)      cspec_log_memory(__LINE__, ptr);
 #define cspec_log_memory(ptr)     _cspec_log(0, __LINE__, ptr, NULL);
 
 /*----------------------------------------------------------------------------*\
@@ -369,7 +362,7 @@ typedef struct TestSuite {
 *
 * \param expect(to_fail);
 */
-#define to_fail                   _cspec_directive(1, 0)//_cspec_expect_to_fail()
+#define to_fail                   _cspec_test_directive(1, 0)
 
 /*
 * \brief A pre-test directive telling the system to expect an assertion to fail.
@@ -381,10 +374,9 @@ typedef struct TestSuite {
 * \brief This feature requires assertion tracking to be enabled. See the
 *   description for cspec_assert for details.
 *
-* \param expect(assertion_failure);
+* \param expect(to_assert);
 */
-//#define assertion_failure         _cspec_expect_assertion_failure()
-#define to_assert                 _cspec_directive(2, __LINE__)//_cspec_expect_assertion_failure()
+#define to_assert                 _cspec_test_directive(2, __LINE__)
 
 /*
 * \brief Memory errors are treated differently from regular errors; a test
@@ -395,7 +387,7 @@ typedef struct TestSuite {
 *
 * \param expect(memory_errors);
 */
-#define memory_errors             _cspec_directive(3, 0)//_cspec_memory_expect_to_fail()
+#define memory_errors             _cspec_test_directive(3, 0)
 
 /*
 * \brief Force the next call to malloc to return NULL. Only the first call to
@@ -404,11 +396,9 @@ typedef struct TestSuite {
 * \brief Note: this also impacts allocations through calloc and realloc,
 *   including when realloc would normally just grow the memory space.
 *
-* \param expect(null_malloc)
+* \param expect(malloc_to_fail)
 */
-//#define null_malloc               _cspec_memory_malloc_null(TRUE)
-//#define malloc_failure            _cspec_memory_malloc_null(TRUE)
-#define malloc_to_fail            _cspec_directive(4, 1)
+#define malloc_to_fail            _cspec_test_directive(4, 1)
 
 /*
 * \brief Force all remaining attempts to allocate memory for this test to fail.
@@ -416,20 +406,25 @@ typedef struct TestSuite {
 * \brief Note: this also impacts allocations through calloc and realloc,
 *   including when realloc would normally just grow the memory space.
 *
-* \param expect(null_mallocs)
+* \param expect(malloc_to_always_fail)
 */
-//#define null_mallocs              _cspec_memory_malloc_null(FALSE)
-//#define malloc_failures           _cspec_memory_malloc_null(FALSE)
-#define malloc_to_always_fail     _cspec_directive(4, 0)//_cspec_memory_malloc_null(FALSE)
+#define malloc_to_always_fail     _cspec_test_directive(4, 0)
+
+/*
+* \brief Force realloc to move memory on the next invocation, even if there is
+*   space to resize or the size would shrink.
+*
+* \param expect(realloc_to_move)
+*/
+#define realloc_to_move           _cspec_test_directive(5, 1)
 
 /*
 * \brief Force realloc to always move memory for the remainder of the test, even
 *   if there is space to resize.
 *
-* \param expect(moving_realloc)
+* \param expect(realloc_to_always_move)
 */
-#define realloc_to_move           _cspec_directive(5, 1)
-#define realloc_to_always_move    _cspec_directive(5, 0)
+#define realloc_to_always_move    _cspec_test_directive(5, 0)
 
 //void cspec_realloc_always_moves(csBool enable);
 
@@ -812,14 +807,14 @@ typedef struct TestSuite {
 *
 * \param - `expect(malloc_count == 1);`
 */
-#define malloc_count              _cspec_directive(6, 0)
+#define malloc_count              _cspec_test_directive(6, 0)
 
 /*
 * \brief Gets the number of calls to free at this point in test execution
 *
 * \param - `expect(free_count == 1);`
 */
-#define free_count                _cspec_directive(7, 0)
+#define free_count                _cspec_test_directive(7, 0)
 
 void* cspec_malloc(csSize size);
 void  cspec_free(void* mem);
@@ -1020,16 +1015,15 @@ void cspec_out_print(void);
   Internal functions
 \*----------------------------------------------------------------------------*/
 
-void    cspec_print(const char* message);
-csBool  _cspec_begin(int line, const char* desc);
-csBool  _cspec_active(void);
-void    _cspec_expcount(void);
+int     _cspec_run_all(int count, TestSuite* suites[], int argc, char* argv[]);
+csBool  _cspec_test_begin(int line, const char* desc);
+csBool  _cspec_test_active(void);
+void    _cspec_test_expcount(void);
+int     _cspec_test_directive(int mode, int param);
 csBool  _cspec_context_begin(int line, const char* desc);
 csBool  _cspec_context_end(int line);
 void    _cspec_log(int status, int line, const void* mem, const char* message);
-int     _cspec_directive(int mode, int param);
-int     _cspec_run_all(int count, TestSuite* suites[], int argc, char* argv[]);
-void    _cspec_error_typed(int line, const char* pfix, const char* fmt,
+void    _cspec_log_error(int line, const char* pfix, const char* fmt,
   const char* t_a0, const void* a0, const char* t_a1, const void* a1,
   const char* t_a2, const void* a2, const char* t_a3, const void* a3,
   const char* t_a4, const void* a4, const char* t_a5, const void* a5,
@@ -1134,8 +1128,8 @@ void    _cspec_error_typed(int line, const char* pfix, const char* fmt,
 #define _describe(NAME) static const int _fn_line_##NAME = __LINE__; void test_##NAME(void)
 /*      _context(DESC) for (;_cspec_context_begin(__LINE__, "..."DESC) || _cspec_context_end(__LINE__);) */
 #define _context(DESC) for (int _loop_ctx = 0; (_loop_ctx++ < 2) && _cspec_context_begin(__LINE__, "context: %c["LINESTR"] "DESC);) if (_loop_ctx == 2) { if (_cspec_context_end(__LINE__)) return; } else
-#define _test(DESC) for (;_cspec_begin(__LINE__, "test %c["LINESTR"] "DESC);)
-#define _after for (int _loop_ctx = 0; _loop_ctx++ < 1 && _cspec_active();)
+#define _test(DESC) for (;_cspec_test_begin(__LINE__, "test %c["LINESTR"] "DESC);)
+#define _after for (int _loop_ctx = 0; _loop_ctx++ < 1 && _cspec_test_active();)
 
 #define _test_suite(NAME) TestSuite NAME = { .header="in file: %c"__FILE__, .filename=__FILE__, .test_groups = (TestGroup(*)[])(&(TestGroup[])
 #define _test_group(TEST_FN) { .line = &_fn_line_##TEST_FN, .header=#TEST_FN, .group_fn = test_##TEST_FN }
@@ -1145,7 +1139,7 @@ void    _cspec_error_typed(int line, const char* pfix, const char* fmt,
 #define _test_warn(message) _cspec_log(1, __LINE__, NULL, message)
 #define _test_fail(issue) do { _cspec_log(2, __LINE__, NULL, issue); return; } while(0)
 
-#define _test_fail_args_va(S,fmt,A,a,B,b,C,c,D,d,E,e,F,f,G,g,H,h,I,i,J,j,...) _cspec_error_typed(__LINE__,S,fmt,A,a,B,b,C,c,D,d,E,e,F,f,G,g,H,h,I,i,J,j)
+#define _test_fail_args_va(S,fmt,A,a,B,b,C,c,D,d,E,e,F,f,G,g,H,h,I,i,J,j,...) _cspec_log_error(__LINE__,S,fmt,A,a,B,b,C,c,D,d,E,e,F,f,G,g,H,h,I,i,J,j)
 #define _test_fail_args(S, /* fmt, */ ...) _test_fail_args_va(S,__VA_ARGS__,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0)
 
 #define _test_fail_t(A, x, B, sTa, sTb) { _test_fail_args("expected "#A" "#x" "#B, "%n\nreceived {} "#x" {}", sTa, (void*)&_A, sTb, (void*)&_B); return; }
@@ -1174,7 +1168,7 @@ void    _cspec_error_typed(int line, const char* pfix, const char* fmt,
 #define _expect_type2(S, A, x, B, T, t, ...)        T        _A = (A);    t        _B    = (B);                     if (!(_A x _B))   _test_fail_t(A, x, B, #T, #t)
 #define _expect_type1(S, A, x, B, T, ...)           T        _A = (A);    T        _B    = (B);                     if (!(_A x _B))   _test_fail_t(A, x, B, #T, #T)
 #define _expect_true(S, A, ...)                                                                                     if (!(A))         _test_fail("expected "S)
-#define _expect_va(S, U, V, W, X, Y, Z,_0,_1,_2, F, ...) do { _cspec_expcount(); _expect##F(S, U, V, W, X, Y, Z); } while(0)
+#define _expect_va(S, U, V, W, X, Y, Z,_0,_1,_2, F, ...) do { _cspec_test_expcount(); _expect##F(S, U, V, W, X, Y, Z); } while(0)
 #define _expect(S, ...) _expect_va(S, __VA_ARGS__, _fn_expr, _fn_comp, _fn_true, _comp_all, _type2, _type1, _expr, _comp, _true)
 
 #define _all_comp_part(A, FOREACH, MATCHER, EXPECTED) FOREACH(_iter_all, _loop_all, A) { _test = MATCHER; if (!_test) { _index = _loop_all; _pvalue = _iter_all; EXPECTED break; } } _test ^= _tmp

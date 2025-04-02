@@ -26,8 +26,8 @@
 
 describe(deduction) {
 
-  // ignore these tests if not >= C11
-#ifdef _USE_DEDUCTION
+  /* ignore these tests if not >= C11 */
+#if CSPEC_USE_DEDUCTION > 0
 
   int x = 0;
   char* type_string = NULL;
@@ -68,11 +68,10 @@ describe(deduction) {
     expected = "char[]";
   }
 
-  /*
   it("checks size_t") {
-    size_t s = sizeof(size_t);
-    expect(s, == , 51, size_t);
-  } //*/
+    csSize s = sizeof(csSize);
+    expect(s, == , sizeof(void*), csSize);
+  }
 
   after{
     expect(type_string to match(expected, cspec_streq));
@@ -99,7 +98,7 @@ describe(tests) {
 
   test("doesn't fail because a break; saves us from the fail statement") {
     break;
-    test_fail("Can't reach this");
+    cspec_fail("Can't reach this");
   }
 
   /* Blocking this one out because it's annoying
@@ -112,16 +111,16 @@ describe(tests) {
     expect(to_fail);
 
     test("'test_fail' just causes a test to outright fail") {
-      test_fail("I failed because I felt like it");
+      cspec_fail("I failed because I felt like it");
     }
 
     test("logs a message (only visible with a verbose/-v setting) then fails") {
-      test_log("this causes the header to print twice... would like to fix, but hey");
-      test_fail("oops, failed again");
+      cspec_log("this causes the header to print twice... would like to fix, but hey");
+      cspec_fail("oops, failed again");
     }
 
     test("another fail to balance output...") {
-      test_fail("Yep, it fails");
+      cspec_fail("Yep, it fails");
     }
 
     /* Blocking this one because of course it actually makes the test run fail
