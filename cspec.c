@@ -989,176 +989,6 @@ finish:
 #endif
 
 /*----------------------------------------------------------------------------*\
-  Test Context
-\*----------------------------------------------------------------------------*\
-* A test context allows pre-test setup to be shared between multiple tests.
-* Variables can be created and accessed within the tests, and other setup can
-* be performed before running the tests. After each test, the test group
-* function is exited and re-entered, meaning the context is recreated for every
-* test (ie, incrementing a shared value in one test will not affect the next
-* test), and after the context is passed, the setup won't be run again for any
-* tests that follow it.
-*/
-#if 1
-
-/*
-* To allow nested contexts, we need a stack... the stack persists for the whole
-* test group (between multiple calls of the group function), and is used to
-* keep track of
-*/
-
-/* Called whenever the test enters a "context()" block */
-csBool _cspec_context_begin(int line, const char* desc) {
-
-  /*
-  * If we are currently executing a test, skip the context (allow previous
-  * contexts to close out their post-test statements)
-  */
-  if (test.in_progress) {
-    return FALSE;
-  }
-
-  /*
-  * On each pass of the test function, we have to walk up the stack. If our
-  * context is already there, don't create a duplicate of it.
-  */
-  /* TODO: This seems unreliable, what if two contexts have an identical
-  *    description, can they get optimized into one string pool?
-  *    Use __COUNT__ instead?
-  */
-  if (test.ctx.index < test.ctx.top
-  &&  test.ctx.stack[test.ctx.index + 1].desc == desc
-  ) {
-    ++test.ctx.index;
-    return TRUE;
-  }
-
-  /*
-  * If we're completing execution of the context, we expect it to be at the
-  * top of the stack
-  */
-  if (test.ctx.stack[test.ctx.index].desc == desc) {
-    return TRUE;
-  }
-
-  /*
-  * If we're not on the stack anymore, and the current test line is past our
-  * context, we've completed the tests in it and can skip it.
-  */
-  if (test.current_line > line) {
-    return FALSE;
-  }
-
-  /*
-  * Any other context on the stack should still be open (and thus already
-  * passed by the stack ptr), or have already closed out and be gone.
-  */
-  real_assert(test.ctx.index == test.ctx.top);
-
-  /*
-  * If this context's line was specified in the input params, run all the
-  * tests in this context, and end the tests as soon as it's popped.
-  */
-  csBool is_requested = FALSE;
-  if (line == param.line) {
-    is_requested = TRUE;
-    param.line = 0;
-  }
-
-  /*
-  * When this is added to the stack, we can set it as the current line.
-  * (not strictly necessary, but good for bookkeeping?)
-  */
-  test.current_line = line;
-
-  /* Make sure we won't overflow the stack if we add another context */
-  if (test.ctx.top + 1 >= cspec_max_context_depth) {
-    _cspec_log(S_WARNING, line, NULL,
-      "context error:%c Too many nested contexts - maximum depth allowed: "
-      STR(cspec_max_context_depth)
-    );
-    _cspec_log(S_WARNING, line, NULL,
-      "%cStack limit can be increased by defining cspec_max_context_depth"
-    );
-    return FALSE;
-  }
-
-  /* If we get here, we are entering a context for the first time. */
-  test.ctx.index = ++test.ctx.top;
-  test.ctx.stack[test.ctx.index] = (Context){
-    .desc = desc,
-    .printed = FALSE,
-    .requested_context = is_requested
-  };
-
-  return TRUE;
-}
-
-/* Called at the end of a context block in "context_end" */
-csBool _cspec_context_end(int line) {
-
-  /*
-  * If we're at the end of a context, we want to pop it off the stack if we
-  * didn't actually run any tests in this pass. Otherwise, return false to
-  * keep executing within this context.
-  */
-  if (test.in_progress) {
-    return FALSE;
-  }
-
-  /*
-  * Sanity check - this generally shouldn't be possible to hit?
-  */
-  /*
-  assert(test.current_line < line);
-  if (test.current_line >= line) {
-    return FALSE;
-  }
-  */
-
-  /*
-  * Update to the next line, because the context begin and end statements
-  * should actually be on the same line.
-  *
-  * This will usually make the line value go down (unless the context is
-  * empty), which is ok because as long as it's above the context line
-  * the entire block will be skipped.
-  */
-  test.current_line = line + 1;
-
-  /*
-  * Once we pop a specifically requested context, end the tests.
-  * If we're in verbose mode, we want to still go thorugh them all to print
-  * the descriptions of un-run tests.
-  */
-  if (test.ctx.stack[test.ctx.top].requested_context) {
-    param.line = -1;
-  }
-
-  /* Make sure we're not trying to pop the stack root */
-  real_assert(test.ctx.top != 0);
-
-  /* Pop the context from the stack */
-  test.ctx.index = --test.ctx.top;
-
-  /*
-  * True here to force a return after executing a context when no tests were
-  * actually executed, either because it's empty or all the tests have already
-  * finished. We don't want to continue to the next test block if this context
-  * had allocated or connected to something exterlal.
-  *
-  * TODO: This should probably still be better handled in case there is any test
-  * cleanup code after all the contexts, ex, to clear memory allocated somewhere
-  * other than cspec's allocator. If this would return true here, instead set a
-  * flag that prevents all other tests from running but doesn't cancel execution
-  * of the describe function (closing statements should still be run, but after
-  * blocks should not).
-  */
-  return TRUE;
-}
-#endif
-
-/*----------------------------------------------------------------------------*\
   Memory Testing
 \*----------------------------------------------------------------------------*/
 #if 1
@@ -1532,6 +1362,176 @@ void cspec_assert(csBool assertion) {
 }
 
 /*----------------------------------------------------------------------------*\
+  Test Context
+\*----------------------------------------------------------------------------*\
+* A test context allows pre-test setup to be shared between multiple tests.
+* Variables can be created and accessed within the tests, and other setup can
+* be performed before running the tests. After each test, the test group
+* function is exited and re-entered, meaning the context is recreated for every
+* test (ie, incrementing a shared value in one test will not affect the next
+* test), and after the context is passed, the setup won't be run again for any
+* tests that follow it.
+*/
+#if 1
+
+/*
+* To allow nested contexts, we need a stack... the stack persists for the whole
+* test group (between multiple calls of the group function), and is used to
+* keep track of
+*/
+
+/* Called whenever the test enters a "context()" block */
+csBool _cspec_context_begin(int line, const char* desc) {
+
+  /*
+  * If we are currently executing a test, skip the context (allow previous
+  * contexts to close out their post-test statements)
+  */
+  if (test.in_progress) {
+    return FALSE;
+  }
+
+  /*
+  * On each pass of the test function, we have to walk up the stack. If our
+  * context is already there, don't create a duplicate of it.
+  */
+  /* TODO: This seems unreliable, what if two contexts have an identical
+  *    description, can they get optimized into one string pool?
+  *    Use __COUNT__ instead?
+  */
+  if (test.ctx.index < test.ctx.top
+    && test.ctx.stack[test.ctx.index + 1].desc == desc
+    ) {
+    ++test.ctx.index;
+    return TRUE;
+  }
+
+  /*
+  * If we're completing execution of the context, we expect it to be at the
+  * top of the stack
+  */
+  if (test.ctx.stack[test.ctx.index].desc == desc) {
+    return TRUE;
+  }
+
+  /*
+  * If we're not on the stack anymore, and the current test line is past our
+  * context, we've completed the tests in it and can skip it.
+  */
+  if (test.current_line > line) {
+    return FALSE;
+  }
+
+  /*
+  * Any other context on the stack should still be open (and thus already
+  * passed by the stack ptr), or have already closed out and be gone.
+  */
+  real_assert(test.ctx.index == test.ctx.top);
+
+  /*
+  * If this context's line was specified in the input params, run all the
+  * tests in this context, and end the tests as soon as it's popped.
+  */
+  csBool is_requested = FALSE;
+  if (line == param.line) {
+    is_requested = TRUE;
+    param.line = 0;
+  }
+
+  /*
+  * When this is added to the stack, we can set it as the current line.
+  * (not strictly necessary, but good for bookkeeping?)
+  */
+  test.current_line = line;
+
+  /* Make sure we won't overflow the stack if we add another context */
+  if (test.ctx.top + 1 >= cspec_max_context_depth) {
+    _cspec_log(S_WARNING, line, NULL,
+      "context error:%c Too many nested contexts - maximum depth allowed: "
+      STR(cspec_max_context_depth)
+    );
+    _cspec_log(S_WARNING, line, NULL,
+      "%cStack limit can be increased by defining cspec_max_context_depth"
+    );
+    return FALSE;
+  }
+
+  /* If we get here, we are entering a context for the first time. */
+  test.ctx.index = ++test.ctx.top;
+  test.ctx.stack[test.ctx.index] = (Context){
+    .desc = desc,
+    .printed = FALSE,
+    .requested_context = is_requested
+  };
+
+  return TRUE;
+}
+
+/* Called at the end of a context block in "context_end" */
+csBool _cspec_context_end(int line) {
+
+  /*
+  * If we're at the end of a context, we want to pop it off the stack if we
+  * didn't actually run any tests in this pass. Otherwise, return false to
+  * keep executing within this context.
+  */
+  if (test.in_progress) {
+    return FALSE;
+  }
+
+  /*
+  * Sanity check - this generally shouldn't be possible to hit?
+  */
+  /*
+  assert(test.current_line < line);
+  if (test.current_line >= line) {
+    return FALSE;
+  }
+  */
+
+  /*
+  * Update to the next line, because the context begin and end statements
+  * should actually be on the same line.
+  *
+  * This will usually make the line value go down (unless the context is
+  * empty), which is ok because as long as it's above the context line
+  * the entire block will be skipped.
+  */
+  test.current_line = line + 1;
+
+  /*
+  * Once we pop a specifically requested context, end the tests.
+  * If we're in verbose mode, we want to still go thorugh them all to print
+  * the descriptions of un-run tests.
+  */
+  if (test.ctx.stack[test.ctx.top].requested_context) {
+    param.line = -1;
+  }
+
+  /* Make sure we're not trying to pop the stack root */
+  real_assert(test.ctx.top != 0);
+
+  /* Pop the context from the stack */
+  test.ctx.index = --test.ctx.top;
+
+  /*
+  * True here to force a return after executing a context when no tests were
+  * actually executed, either because it's empty or all the tests have already
+  * finished. We don't want to continue to the next test block if this context
+  * had allocated or connected to something exterlal.
+  *
+  * TODO: This should probably still be better handled in case there is any test
+  * cleanup code after all the contexts, ex, to clear memory allocated somewhere
+  * other than cspec's allocator. If this would return true here, instead set a
+  * flag that prevents all other tests from running but doesn't cancel execution
+  * of the describe function (closing statements should still be run, but after
+  * blocks should not).
+  */
+  return TRUE;
+}
+#endif
+
+/*----------------------------------------------------------------------------*\
   Test Begin/End
 \*----------------------------------------------------------------------------*/
 
@@ -1572,7 +1572,7 @@ csBool _cspec_test_begin(int line, const char* desc) {
   return test.in_progress;
 }
 
-csBool _cspec_end(void) {
+csBool _cspec_test_end(void) {
   if (!test.in_progress) {
     return FALSE;
   }
@@ -1679,84 +1679,10 @@ int _cspec_test_directive(int mode, int value) {
 }
 
 /*----------------------------------------------------------------------------*\
-  Test Runners
+  Console Inputs
 \*----------------------------------------------------------------------------*/
 
-void cspec_set_line(int line) {
-  param.line = line;
-}
-
-static void before_run(void) {
-  test.count = 0;
-  test.count_passed = 0;
-  test.count_warnings = 0;
-}
-
-static void before_suite(const TestSuite* suite) {
-  test.suite = suite;
-  test.printed_filename = FALSE;
-}
-
-static void before_group(const TestGroup* t) {
-  test.printed_function = FALSE;
-  test.function = t;
-  test.current_line = 0;
-  real_assert(test.ctx.top == 0);
-  cspec_memset(&test.ctx, 0, sizeof(test.ctx));
-}
-
-static void before_pass(void) {
-  _cspec_mem_reset(!param.skip_memory_test);
-  cspec_memset(&test.pass, 0, sizeof(test.pass));
-  test.ctx.index = 0;
-  test.out.tabstop = 0;
-}
-
-static void _cspec_run_group(const TestGroup* t) {
-  before_group(t);
-  int prev_line;
-
-  for (;;) {
-    before_pass();
-    prev_line = test.current_line;
-
-    test.in_function = TRUE;
-#ifdef CSPEC_USE_ASSERT_HANDLING
-    if (setjmp(test.pass.jump_buffer) == 0)
-#endif
-    t->group_fn();
-    test.in_function = FALSE;
-
-    if (!test.in_progress && prev_line == test.current_line) break;
-
-    _cspec_end();
-  }
-}
-
-void _cspec_run_suite(const TestSuite* suite) {
-  before_suite(suite);
-
-  if (!cspec_strrstr(suite->filename, param.file)) {
-    if (param.verbose == V_VERY) {
-      cspec_out_str("skipping file: %c");
-      cspec_out_str(suite->filename);
-      _cspec_out_print(CONCOL_Purple);
-    }
-    return;
-  }
-
-  const TestGroup* t = &(*suite->test_groups)[0];
-  while (t->line) {
-    int tmp_line = param.line;
-    if (*t->line == param.line) param.line = 0;
-    _cspec_run_group(t++);
-    param.line = tmp_line;
-  }
-
-  test.suite = NULL;
-}
-
-static csBool process_param_basic(char c) {
+static csBool _cspec_run_param(char c) {
   csBool handled = TRUE;
   switch (c) {
     case 'v': param.verbose = V_RUN; break;
@@ -1772,7 +1698,7 @@ static csBool process_param_basic(char c) {
   return handled;
 }
 
-static csBool process_args(int argc, char* argv[]) {
+static csBool _cspec_run_args(int argc, char* argv[]) {
   for (int i = 1; i < argc; ++i) {
     char* arg = argv[i];
 
@@ -1782,7 +1708,7 @@ static csBool process_args(int argc, char* argv[]) {
         char* c = arg;
         csBool handled = FALSE;
         while (*(++c)) {
-          handled |= process_param_basic(*c);
+          handled |= _cspec_run_param(*c);
         }
         if (handled) continue;
       }
@@ -1812,22 +1738,22 @@ static csBool process_args(int argc, char* argv[]) {
         return TRUE;
 
       } else if (cspec_streq(arg, "--verbose")) {
-        process_param_basic('v');
+        _cspec_run_param('v');
 
       } else if
       ( cspec_streq(arg, "--force-fails")
       ) {
-        process_param_basic('f');
+        _cspec_run_param('f');
 
       } else if
       ( cspec_streq(arg, "--results")
       ) {
-        process_param_basic('r');
+        _cspec_run_param('r');
 
       } else if
       ( cspec_streq(arg, "--ignore-memory")
       ) {
-        process_param_basic('m');
+        _cspec_run_param('m');
 
       } else if
       (  cspec_streq(arg, "-t")
@@ -1871,6 +1797,74 @@ static csBool process_args(int argc, char* argv[]) {
   return FALSE;
 }
 
+/*----------------------------------------------------------------------------*\
+  Test Runners
+\*----------------------------------------------------------------------------*/
+
+void cspec_set_line(int line) {
+  param.line = line;
+}
+
+static void _cspec_before_group(const TestGroup* t) {
+  test.printed_function = FALSE;
+  test.function = t;
+  test.current_line = 0;
+  real_assert(test.ctx.top == 0);
+  cspec_memset(&test.ctx, 0, sizeof(test.ctx));
+}
+
+static void _cspec_before_pass(void) {
+  _cspec_mem_reset(!param.skip_memory_test);
+  cspec_memset(&test.pass, 0, sizeof(test.pass));
+  test.ctx.index = 0;
+  test.out.tabstop = 0;
+}
+
+static void _cspec_run_group(const TestGroup* t) {
+  _cspec_before_group(t);
+  int prev_line;
+
+  for (;;) {
+    _cspec_before_pass();
+    prev_line = test.current_line;
+
+    test.in_function = TRUE;
+#ifdef CSPEC_USE_ASSERT_HANDLING
+    if (setjmp(test.pass.jump_buffer) == 0)
+#endif
+    t->group_fn();
+    test.in_function = FALSE;
+
+    if (!test.in_progress && prev_line == test.current_line) break;
+
+    _cspec_test_end();
+  }
+}
+
+void _cspec_run_suite(const TestSuite* suite) {
+  test.suite = suite;
+  test.printed_filename = FALSE;
+
+  if (!cspec_strrstr(suite->filename, param.file)) {
+    if (param.verbose == V_VERY) {
+      cspec_out_str("skipping file: %c");
+      cspec_out_str(suite->filename);
+      _cspec_out_print(CONCOL_Purple);
+    }
+    return;
+  }
+
+  const TestGroup* t = &(*suite->test_groups)[0];
+  while (t->line) {
+    int tmp_line = param.line;
+    if (*t->line == param.line) param.line = 0;
+    _cspec_run_group(t++);
+    param.line = tmp_line;
+  }
+
+  test.suite = NULL;
+}
+
 int _cspec_run_all(int count, TestSuite* suites[], int argc, char* argv[]) {
 
   /* Reset default params, context, and env*/
@@ -1878,11 +1872,9 @@ int _cspec_run_all(int count, TestSuite* suites[], int argc, char* argv[]) {
   cspec_memset(&param, 0, sizeof(param));
   param.tabsize = DEFAULT_TABSIZE;
 
-  if (process_args(argc, argv)) {
+  if (_cspec_run_args(argc, argv)) {
     return 0;
   }
-
-  before_run();
 
   for (int i = 0; i < count; ++i) {
     _cspec_run_suite(suites[i]);
