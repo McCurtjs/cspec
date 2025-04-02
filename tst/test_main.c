@@ -32,8 +32,6 @@ extern TestSuite tests_cspec;
 
 // Main
 
-#include <stdio.h>
-
 #ifdef __WASM__
 void __attribute((export_name("set_line"))) cspec_set_line(int line);
 
@@ -43,8 +41,8 @@ int __attribute__((export_name("spec_main"))) spec_main(int argc, int line) {
 #else
 int main(int argc, char* argv[]) {
 #endif
-  //argv = (char*[]){ "BLAH", "-vfs", ":141" };
-  //argc = 2;
+  //argv = (char*[]){ "BLAH", "-vs", "cspec_spec.c:151" };
+  //argc = 3;
 
   TestSuite* test_suites[] = {
     &tests_libcs,

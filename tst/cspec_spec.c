@@ -153,7 +153,7 @@ describe(memory) {
       i[0] = 1819043144;
       i[1] = 1752440943;
       i[2] = 560296549;
-      test_log_memory(i);
+      cspec_log_memory(i);
       cspec_free(i);
     }
 

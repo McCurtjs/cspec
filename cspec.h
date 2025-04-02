@@ -262,6 +262,7 @@ typedef struct TestSuite {
 *   to replace with a version that can do dynamic strings.
 */
 #define test_log(message)         _test_log(message)
+#define cspec_log(message)        _cspec_log(0, __LINE__, NULL, message)
 
 /* \brief An alias for `test_log` */
 #define test_note(message)        _test_log(message)
@@ -275,6 +276,7 @@ typedef struct TestSuite {
 *   restrictions as with test_log.
 */
 #define test_warn(warning)        _test_warn(warning)
+#define cspec_warn(warning)       _cspec_log(1, __LINE__, NULL, warning)
 
 /*
 * \brief Automatically fails the test. Do not pass GO. Do not collect $200.
@@ -282,6 +284,7 @@ typedef struct TestSuite {
 * \param issue - String Literal: The error to print.
 */
 #define test_fail(issue)          _test_fail(issue)
+#define cspec_fail(issue)         _cspec_log(2, __LINE__, NULL, issue)
 
 /*
 * \brief Prints a block of test memory for debugging purposes.
@@ -291,7 +294,8 @@ typedef struct TestSuite {
 *   call, will print the whole allocated segment. Any other pointer will print
 *   just three rows of 16 bytes (starting 16 before the requested pointer).
 */
-#define test_log_memory(ptr)      cspec_out_memory(__LINE__, ptr);
+//#define test_log_memory(ptr)      cspec_log_memory(__LINE__, ptr);
+#define cspec_log_memory(ptr)     _cspec_log(0, __LINE__, ptr, NULL);
 
 /*----------------------------------------------------------------------------*\
   Value checking with "Expect"
@@ -1024,7 +1028,6 @@ csBool  _cspec_context_begin(int line, const char* desc);
 csBool  _cspec_context_end(int line);
 void    _cspec_log(int status, int line, const void* mem, const char* message);
 int     _cspec_directive(int mode, int param);
-void    cspec_out_memory(int line, const void* ptr);
 int     _cspec_run_all(int count, TestSuite* suites[], int argc, char* argv[]);
 void    _cspec_error_typed(int line, const char* pfix, const char* fmt,
   const char* t_a0, const void* a0, const char* t_a1, const void* a1,

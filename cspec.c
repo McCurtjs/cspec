@@ -59,10 +59,8 @@
 */
 #ifdef __WASM__
 # define CONCOL(Color, CON, HEX) MACRO_CONCAT(CONCOL_, Color) = HEX
-extern void js_log(const char* str, unsigned int len, ConsoleColor color);
 #else
 # define CONCOL(Color, CON, HEX) MACRO_CONCAT(CONCOL_, Color) = CON
-extern int puts(const char* s);
 #endif
 
 resolve_user_types_fn resolve_user_types = NULL;
@@ -88,6 +86,12 @@ typedef enum ConsoleColor {
   CONCOL(bCyan,   46, 0x100ffff),
   CONCOL(bWhite,  47, 0x1ffffff)
 } ConsoleColor;
+
+#ifdef __WASM__
+extern void js_log(const char* str, unsigned int len, ConsoleColor color);
+#else
+extern int puts(const char* s);
+#endif
 
 typedef enum PrintLevel {
   P_CLEAR,
@@ -573,13 +577,19 @@ static void _cspec_out_print(ConsoleColor color) {
 void cspec_out_print(void) {
   _cspec_out_print(CONCOL_White);
 }
+#endif
+
+/*----------------------------------------------------------------------------*\
+  Output Printing/Formatting
+\*----------------------------------------------------------------------------*/
+#if 1
 
 csBool _cspec_mem_in_bounds(const csByte* p) {
   return p < test.mem.buffer + memory_size_full
       && p >= test.mem.buffer;
 }
 
-static void _cspec_out_memory_row(const csByte* row, csBool target) {
+static void _cspec_log_memory_row(const csByte* row, csBool target) {
   cspec_out_clear();
   cspec_out_pad(test.out.tabstop, ' ');
   cspec_out_fmt("{}{} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} ");
@@ -607,10 +617,10 @@ static void _cspec_out_memory_row(const csByte* row, csBool target) {
   cspec_out_print();
 }
 
-static void _cspec_out_memory(const MemoryRecord* record) {
+static void _cspec_log_record(const MemoryRecord* record) {
   csSize i = 0;
   while (i < record->size + memory_size_fence + 16) {
-    _cspec_out_memory_row(record->ptr + i - 16, i == 16);
+    _cspec_log_memory_row(record->ptr + i - 16, i == 16);
     i += 16;
   }
   if (param.padding) cspec_out_print();
@@ -618,37 +628,6 @@ static void _cspec_out_memory(const MemoryRecord* record) {
 
 static MemoryRecord* memory_record_from_ptr(const void* ptr);
 static void print_headers(int desc_color, PrintLevel desc_level, const char* to_append);
-
-void cspec_out_memory(int line, const void* ptr) {
-  if ((test.current_line && test.current_line >= line)
-  || param.verbose < V_NOTES
-  ) {
-    return;
-  }
-
-  /* check if the pointer is in our allocated blocks list */
-  MemoryRecord* record = memory_record_from_ptr(ptr);
-
-  print_headers(CONCOL_bWhite, P_LOGGED, NULL);
-
-  if (param.padding) cspec_out_print();
-
-  if (record) {
-    _cspec_out_memory(record);
-  }
-  else {
-    const csByte* bytes = ptr;
-    _cspec_out_memory_row(bytes - 16, FALSE);
-    _cspec_out_memory_row(bytes, TRUE);
-    _cspec_out_memory_row(bytes + 16, FALSE);
-  }
-}
-#endif
-
-/*----------------------------------------------------------------------------*\
-  Output Printing/Formatting
-\*----------------------------------------------------------------------------*/
-#if 1
 
 static void print_headers(
   int desc_color, PrintLevel desc_level, const char* to_append
@@ -755,6 +734,8 @@ void _cspec_log(int status, int line, const void* mem, const char* message) {
 
   cspec_log_start(status);
 
+  csUint old_stop = test.out.tabstop;
+
   if (status == S_MEMFAIL) {
     cspec_out_str("memory error: ");
   } else if (line > 0) {
@@ -766,7 +747,9 @@ void _cspec_log(int status, int line, const void* mem, const char* message) {
     cspec_out_str("%c");
   }
 
-  cspec_out_str(message);
+  if (message) {
+    cspec_out_str(message);
+  }
 
   if (status == S_WARNING) {
     ConsoleColor color = test.pass.warned ? CONCOL_Yellow : CONCOL_bYellow;
@@ -776,8 +759,22 @@ void _cspec_log(int status, int line, const void* mem, const char* message) {
   }
 
   if (mem) {
-    test.out.tabstop += param.tabsize;
-    _cspec_out_memory(mem);
+    test.out.tabstop = old_stop + param.tabsize;
+
+    /* check if the pointer is in our allocated blocks list */
+    MemoryRecord* record = memory_record_from_ptr(mem);
+
+    if (param.padding) cspec_out_print();
+
+    if (record) {
+      _cspec_log_record(record);
+    } else {
+      const csByte* bytes = mem;
+      _cspec_log_memory_row(bytes - 16, FALSE);
+      _cspec_log_memory_row(bytes, TRUE);
+      _cspec_log_memory_row(bytes + 16, FALSE);
+    }
+
     test.out.tabstop -= param.tabsize;
   }
 
@@ -1201,7 +1198,7 @@ static csBool memory_check_fence(MemoryRecord* record) {
 static MemoryRecord* memory_record_from_ptr(const void* ptr) {
   for (csUint i = 0; i < test.pass.count_mallocs; ++i) {
     MemoryRecord* rec = &test.mem.records[i];
-    if (rec->ptr == ptr) {
+    if (rec->ptr == ptr || rec == ptr) {
       return rec;
     }
   }
@@ -1636,7 +1633,7 @@ csBool _cspec_end(void) {
       test.pass.expect_fail = FALSE;
       _cspec_log(S_FAILURE, 0, NULL, "expected an assert failure, but received none");
     }
-    if (test.pass.expect_memory_error) {
+    if (test.pass.expect_memory_error && !test.pass.memory_error) {
       _cspec_log(S_FAILURE, 0, NULL, "expected memory errors, but none were found");
     }
   }
