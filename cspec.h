@@ -896,6 +896,7 @@ void cspec_set_line(int line);
 csBool  cspec_isdigit(int c);
 csBool  cspec_isprint(int c);
 csBool  cspec_memeq(const void* a, const void* b, csSize n);
+int     cspec_memcmp(const void* a, const void* b, csSize n);
 void    cspec_memset(void* dst, csByte c, csSize n);
 void    cspec_memcpy(void* dst, const void* src, csSize n);
 void    cspec_memrev(void* start_, csSize chunk_size, csSize chunk_count);
@@ -925,6 +926,8 @@ void cspec_out_bool(csBool b);
 void cspec_out_pad(csUint until_pos, char c);
 void cspec_out_float(double f);
 void cspec_out_print(void);
+
+void cspec_log_start(void);
 
 /*----------------------------------------------------------------------------*\
   Implementation details, turn back now, here there be dragons.
@@ -975,7 +978,7 @@ void cspec_out_print(void);
 *
 * \brief Disable completely:            /DCSPEC_USE_DEDUCTION=0
 */
-#   define CSPEC_USE_DEDUCTION 1
+#   define CSPEC_USE_DEDUCTION 2
 #  else
 /*
 * \brief CSpec type deduction is enabled by default because you're using a C23
@@ -983,18 +986,20 @@ void cspec_out_print(void);
 *
 * \brief Disable completely:            -DCSPEC_USE_DEDUCTION=0
 * \brief Use _Generic, but not typeof:  -DCSPEC_USE_DEDUCTION=1
+* \brief Use typeof, but not auto:      -DCSPEC_USE_DEDUCTION=2
 */
-#   define CSPEC_USE_DEDUCTION 2
+#   define CSPEC_USE_DEDUCTION 3
 #  endif
 # elif __STDC_VERSION__ >= 201112
 /*
-* \brief CSpec type deduction is enabled, but limited to C11 features (_Generic,
-*   excluding typeof).
+* \brief CSpec type deduction is enabled, but limited to C11 features (_Generic)
 *
 * \brief You can manually enable it with a compiler flag if your compiler
 *   supports the necessary extended features:
 *
-* \brief typeof:    -DCSPEC_USE_DEDUCTION=2
+* \brief Disable completely:            -DCSPEC_USE_DEDUCTION=0
+* \brief Use typeof:                    -DCSPEC_USE_DEDUCTION=2
+* \brief Use typeof and auto:           -DCSPEC_USE_DEDUCTION=3
 */
 #  define CSPEC_USE_DEDUCTION 1
 # else
@@ -1004,8 +1009,9 @@ void cspec_out_print(void);
 * \brief You can manually enable it with a compiler flag if your compiler
 *   supports the necessary extended features:
 *
-* \brief _Generic:  -DCSPEC_USE_DEDUCTION=1
-* \brief + typeof:  -DCSPEC_USE_DEDUCTION=2
+* \brief _Generic:                      -DCSPEC_USE_DEDUCTION=1
+* \brief + typeof:                      -DCSPEC_USE_DEDUCTION=2
+* \brief + auto:                        -DCSPEC_USE_DEDUCTION=3
 */
 #  define CSPEC_USE_DEDUCTION 0
 # endif
@@ -1031,17 +1037,34 @@ void    _cspec_log_error(int line, const char* pfix, const char* fmt,
   const char* t_a8, const void* a8, const char* t_a9, const void* a9
 );
 
+/* functions that only */
+void cpyint(void* dst, long long signed int src, csSize size);
+void cpyuint(void* dst, long long unsigned int src, csSize size);
+void cpyflt(void* dst, double src, csSize size);
+void cpyptr(void* dst, const void* src, csSize size);
+
 /*----------------------------------------------------------------------------*\
   Macro Hell
 \*----------------------------------------------------------------------------*/
 
 #define _cspec_run_all_suites(suites) _cspec_run_all(ARRAY_COUNT(suites), suites, argc, argv)
 
-#if CSPEC_USE_DEDUCTION >= 2
+#if CSPEC_USE_DEDUCTION >= 3
 # define AUTO_DUP(NAME, VALUE) auto NAME = VALUE
-#elif CSPEC_USE_DEDUCTION >= 1
+#elif CSPEC_USE_DEDUCTION == 2
 # define AUTO_DUP(NAME, VALUE) typeof((0, VALUE)) NAME = VALUE
-#else
+#elif CSPEC_USE_DEDUCTION == 1
+# ifndef CSPEC_CUSTOM_TYPES_CPYFN
+#  define CSPEC_CUSTOM_TYPES_CPYFN
+# endif
+# define AUTO_DUP(NAME, VALUE) csByte NAME[sizeof((0,VALUE))]; \
+  _Generic(VALUE, CSPEC_CUSTOM_TYPES_CPYFN \
+    _Bool: cpyint, char: cpyint, short: cpyint, int: cpyint, long: cpyint, long long: cpyint, \
+    unsigned char: cpyuint, unsigned short: cpyuint, unsigned: cpyuint, unsigned long: cpyuint, unsigned long long: cpyuint, \
+    float: cpyflt, double: cpyflt, default: cpyptr \
+  ) ( NAME, VALUE, sizeof((0,VALUE)) )
+#
+#else /* CSPEC_USE_DEDUCTION == 0 */
 # define AUTO_DUP(NAME, VALUE) _Static_assert(0, "Type deduction not supported")
 # define _deduct_warn(EXP_STR) _test_warn("output type deduction is disabled"); _test_warn("use `"EXP_STR"` for value display");
 #endif
@@ -1054,15 +1077,20 @@ void    _cspec_log_error(int line, const char* pfix, const char* fmt,
 # /* # define _type_s_ptr_arr(X, T) _Generic(&(X), T**: #T"*", default: #T"[]" ) // this version works in C11, but not for literals */
 # /* # define _type_s_ptr_arr(X, T) _Generic((X), typeof(X): #T"*", default: #T"[]") */
 #
-# ifdef CSPEC_MSVC
-#  /* MSVC has an issue that sometimes causes _Generic to throw a warning that a variable was initialized but not used. */
-#  pragma warning ( disable : 4189 )
-#  /* Technically legal, but trips warning "unreachable-code-generic-assoc" in CLang */
-#  define _type_s_ptr_arr(X, T) _Generic((X), typeof(X): #T"*", default: #T"[]")
+# if CSPEC_USE_DEDUCTION == 1
+#  /* Without typeof, we're not able to differentiate between arrays and pointers, so we'll just decay to pointers */
+#  define _type_s_ptr_arr(X, T) #T"*"
 # else
-#  /* Also legal, but trips E0029 "Expected an expression" in MSVC */
-#  /* the NULL is important with GCC to make sure the control expression is actually an expression and not just a type. */
-#  define _type_s_ptr_arr(X, T) _Generic((typeof(X)*)NULL, T**: #T"*", default: #T"[]")
+#  ifdef CSPEC_MSVC
+#   /* MSVC has an issue that sometimes causes _Generic to throw a warning that a variable was initialized but not used. */
+#   pragma warning ( disable : 4189 )
+#   /* Technically legal, but trips warning "unreachable-code-generic-assoc" in CLang */
+#   define _type_s_ptr_arr(X, T) _Generic((X), typeof(X): #T"*", default: #T"[]")
+#  else
+#   /* Also legal, but trips E0029 "Expected an expression" in MSVC */
+#   /* the NULL is important with GCC to make sure the control expression is actually an expression and not just a type. */
+#   define _type_s_ptr_arr(X, T) _Generic((typeof(X)*)NULL, T**: #T"*", default: #T"[]")
+#  endif
 # endif
 # define _type_s_h(X, T) T: #T, T*: _type_s_ptr_arr(X, T), const T*: _type_s_ptr_arr(X, const T)
 //*
@@ -1076,7 +1104,7 @@ void    _cspec_log_error(int line, const char* pfix, const char* fmt,
 //    but then it won't be obvious that the type is not supported, and the output will not be useful
 /*/
 // abridged version that's easier on the visual studio macro previewer, lol
-# if 1
+# if 0
 #  define _type_s(X) _Generic((X),                                            \
   CSPEC_CUSTOM_TYPES                _Bool:              "bool",               \
   _type_s_h(X, char),               _type_s_h(X, int),                        \
@@ -1151,23 +1179,28 @@ void    _cspec_log_error(int line, const char* pfix, const char* fmt,
     return;                                                                                                                                               \
   } }                                                                                                                                                  /**/
 
-#if CSPEC_USE_DEDUCTION > 0
-# define _expect_fn_expr(S, F, x, B, P, ...)        AUTO_DUP(_R , (F P)); AUTO_DUP(_B    , (B));  _param_fn_def P   if (!(_R x _B))   _test_fail_fn_expr(F, x, B, P)
-# define _expect_fn_comp(S, F, M, P, ...)           AUTO_DUP(_R , (F P)); csBool   _test = M(_R); _param_fn_def P   if (!_test)       _test_fail_fn_comp(S, P)
-# define _expect_fn_true(S, A, F, B, ...)           AUTO_DUP(_A , (A));   AUTO_DUP(_B    , (B));                    if (!(F(_A, _B))) _test_fail_fn_true(F, A, B)
-# define _expect_expr(S, A, x, B, ...)              AUTO_DUP(_A , (A));   AUTO_DUP(_B    , (B));                    if (!(_A x _B))   _test_fail_t(A, x, B, _type_s(_A), _type_s(_B))
-# define _expect_comp(S, A, F, ...)                 AUTO_DUP(_R , (A));   csBool   _test = F(_R);                   if (!_test)       _test_fail_comp(S)
+#if CSPEC_USE_DEDUCTION > 1
+# define _expect_fn_expr(S, F, x, B, P, ...)  AUTO_DUP(_R , (F P)); AUTO_DUP(_B    , (B));  _param_fn_def P   if (!(_R x _B))   _test_fail_fn_expr(F, x, B, P)
+# define _expect_fn_comp(S, F, M, P, ...)     AUTO_DUP(_R , (F P)); csBool   _test = M(_R); _param_fn_def P   if (!_test)       _test_fail_fn_comp(S, P)
+# define _expect_fn_true(S, A, F, B, ...)     AUTO_DUP(_A , (A));   AUTO_DUP(_B    , (B));                    if (!(F(_A, _B))) _test_fail_fn_true(F, A, B)
+# define _expect_expr(S, A, x, B, ...)        AUTO_DUP(_A , (A));   AUTO_DUP(_B    , (B));                    if (!(_A x _B))   _test_fail_t(A, x, B, _type_s(_A), _type_s(_B))
+# define _expect_comp(S, A, F, ...)           AUTO_DUP(_R , (A));   csBool   _test = F(_R);                   if (!_test)       _test_fail_comp(S)
 #else
-# define _expect_fn_expr(S, F, x, B, P, ...)                              csBool   _test = ((F P) x (B));           if (!_test)       _test_fail("expected X "#x" "#B" where X == "#F#P)
-# define _expect_fn_comp(S, F, M, P, ...)                                 csBool   _test = M((F P));                if (!_test)       _test_fail("expected "S)
-# define _expect_fn_true(S, A, F, B, ...)                                                                           if (!(F(A, B)))   _test_fail("expected to pass "#F"( "#A", "#B" )")
-# define _expect_expr(S, A, x, B, ...)              _deduct_warn("expect(lhs, "#x" , rhs, type)");                  if(!(A x B))      _test_fail("expected "#A" "#x" "#B)
-# define _expect_comp(S, A, F, ...)                                       csBool   _test = F(A);                    if (!_test)       _test_fail("expected "S)
+# define _expect_fn_expr(S, F, x, B, P, ...)                        csBool   _test = ((F P) x (B));           if (!_test)       _test_fail("expected X "#x" "#B" where X == "#F#P)
+# define _expect_fn_comp(S, F, M, P, ...)                           csBool   _test = M((F P));                if (!_test)       _test_fail("expected "S)
+# define _expect_fn_true(S, A, F, B, ...)                                                                     if (!(F(A, B)))   _test_fail("expected to pass "#F"( "#A", "#B" )")
+# if CSPEC_USE_DEDUCTION == 0
+#  define _expect_expr(S, A, x, B, ...)       _deduct_warn("expect(lhs, "#x" , rhs, type)");                  if (!(A x B))     _test_fail("expected "#A" "#x" "#B)
+#  define _expect_comp(S, A, F, ...)                                csBool   _test = F(A);                    if (!_test)       _test_fail("expected "S)
+# else
+#  define _expect_expr(S, A, x, B, ...)       if (!((A) x (B))) {   AUTO_DUP(_A,    (A)); AUTO_DUP(_B, (B));  _test_fail_args("expected "#A" "#x" "#B, "%n\nreceived {} "#x" {}", _type_s(A), _A, _type_s(B), _B); return; }
+#  define _expect_comp(S, A, F, ...)          csBool   _test = F(A); if (!_test) {        AUTO_DUP(_R, (A));  _test_fail_args("expected "S, "%n\nreceived {}",                    _type_s(A), _R); return; }
+# endif
 #endif
-#define _expect_comp_all(S, A, E, B, x, T, F, ...)                        csBool   _test = F(A, B, E, x);           if (!_test)       _test_fail_all(S, T)
-#define _expect_type2(S, A, x, B, T, t, ...)        T        _A = (A);    t        _B    = (B);                     if (!(_A x _B))   _test_fail_t(A, x, B, #T, #t)
-#define _expect_type1(S, A, x, B, T, ...)           T        _A = (A);    T        _B    = (B);                     if (!(_A x _B))   _test_fail_t(A, x, B, #T, #T)
-#define _expect_true(S, A, ...)                                                                                     if (!(A))         _test_fail("expected "S)
+#define _expect_comp_all(S, A, E, B, x, T, F, ...)                  csBool   _test = F(A, B, E, x);           if (!_test)       _test_fail_all(S, T)
+#define _expect_type2(S, A, x, B, T, t, ...)  T        _A = (A);    t        _B    = (B);                     if (!(_A x _B))   _test_fail_t(A, x, B, #T, #t)
+#define _expect_type1(S, A, x, B, T, ...)     T        _A = (A);    T        _B    = (B);                     if (!(_A x _B))   _test_fail_t(A, x, B, #T, #T)
+#define _expect_true(S, A, ...)                                                                               if (!(A))         _test_fail("expected "S)
 #define _expect_va(S, U, V, W, X, Y, Z,_0,_1,_2, F, ...) do { _cspec_test_expcount(); _expect##F(S, U, V, W, X, Y, Z); } while(0)
 #define _expect(S, ...) _expect_va(S, __VA_ARGS__, _fn_expr, _fn_comp, _fn_true, _comp_all, _type2, _type1, _expr, _comp, _true)
 
@@ -1176,11 +1209,11 @@ void    _cspec_log_error(int line, const char* pfix, const char* fmt,
 #define _all_be_comp(A, B, FOREACH, x)    _all_comp_part(A, FOREACH, ((*_iter_all) x (B)),  _expected = (B);)
 #define _all_match_comp(A, B, FOREACH, F) _all_comp_part(A, FOREACH, F(*_iter_all, B),      _expected = B;)
 
-#define _all_setup(T) FALSE; csBool _tmp = _test; long long _index = 0; void* _pvalue = NULL; T _expected; csBool _print_expected_value = FALSE
-#define _all(M, T_el, T_con, ...)                   _all_setup(T_el);                                 T_el* T_con##_foreach_index, 0, M, T_el, _all_comp
-#define _all_be(x, B, T_el, T_con)                  _all_setup(T_el);   _print_expected_value = TRUE; T_el* T_con##_foreach_index, B, x, T_el, _all_be_comp
-#define _all_match(F, B, T_el, T_con, ...)          _all_setup(T_el);   _print_expected_value = TRUE; T_el* T_con##_foreach_index, B, F, T_el, _all_match_comp
-#define _all_match2(F, B, T_el, T_arg, T_con, ...)  _all_setup(T_arg);  _print_expected_value = TRUE; T_el* T_con##_foreach_index, B, F, T_el, _all_match_comp
+#define _all_setup(T) FALSE; csBool _tmp = _test; long long _index = 0; void* _pvalue = NULL; T _expected; csBool _print_expected_value =
+#define _all(M, T_el, T_con, ...)                   _all_setup(T_el)  FALSE;  T_el* T_con##_foreach_index, 0, M, T_el, _all_comp
+#define _all_be(x, B, T_el, T_con)                  _all_setup(T_el)  TRUE;   T_el* T_con##_foreach_index, B, x, T_el, _all_be_comp
+#define _all_match(F, B, T_el, T_con, ...)          _all_setup(T_el)  TRUE;   T_el* T_con##_foreach_index, B, F, T_el, _all_match_comp
+#define _all_match2(F, B, T_el, T_arg, T_con, ...)  _all_setup(T_arg) TRUE;   T_el* T_con##_foreach_index, B, F, T_el, _all_match_comp
 
 #define _all_va(matcher, B, T_el, T_argcon, T_con, F, ...) F(matcher, B, T_el, T_argcon, T_con)
 
@@ -1200,20 +1233,17 @@ void    _cspec_log_error(int line, const char* pfix, const char* fmt,
 #define _be_between_exclusive_start(A)  (A); _test ^= (_B <  _A && _A <= _C)
 
 #define _be_between_va(B_LO, C_HI, MODE, T, T_RES, ...) _matcher_setup(B_LO, C_HI, _be_type_##T_RES(T, T_RES)) _be_between_##MODE
-#if CSPEC_USE_DEDUCTION > 0
-# define _be_between(B, ...) _be_between_va(B, __VA_ARGS__, inclusive, typeof(B), typeof(B))
-#else
-# define _be_between(B, ...) _be_between_va(B, __VA_ARGS__, inclusive, int, int)
-#endif
 
-#define _be_within_exclusive(A) (A); _test ^= (_C - _B <  _A && _A < _C + _B)
+#define _be_within_exclusive(A) (A); _test ^= (_C - _B <  _A && _A <  _C + _B)
 #define _be_within_inclusive(A) (A); _test ^= (_C - _B <= _A && _A <= _C + _B)
-
 #define _be_within_va(B_EXT, C_MID, MODE, T, T_RES, ...) _matcher_setup(B_EXT, C_MID, _be_type_##T_RES(T, T_RES)) _be_within_##MODE
-#if CSPEC_USE_DEDUCTION > 0
-# define _be_within(B, ...) _be_within_va(B, __VA_ARGS__, inclusive, typeof(B), typeof(B))
+
+#if CSPEC_USE_DEDUCTION > 1
+# define _be_between(B, ...)  _be_between_va(B, __VA_ARGS__, inclusive, typeof(B), typeof(B))
+# define _be_within(B, ...)   _be_within_va(B, __VA_ARGS__, inclusive, typeof(B), typeof(B))
 #else
-# define _be_within(B, ...) _be_within_va(B, __VA_ARGS__, inclusive, int, int)
+# define _be_between(B, ...)  _be_between_va(B, __VA_ARGS__, inclusive, int, int)
+# define _be_within(B, ...)   _be_within_va(B, __VA_ARGS__, inclusive, int, int)
 #endif
 
 #endif

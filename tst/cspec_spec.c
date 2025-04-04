@@ -44,12 +44,6 @@ describe(deduction) {
     expected = "int*";
   }
 
-  it("resolves an array type") {
-    int arr[] = { 1, 2 }; (void)arr;
-    type_string = _type_s(arr);
-    expected = "int[]";
-  }
-
   it("resolves a const pointer type") {
     const int* px = &x; (void)px;
     type_string = _type_s(px);
@@ -62,10 +56,22 @@ describe(deduction) {
     expected = "char*";
   }
 
+#if CSPEC_USE_DEDUCTION > 1
+# define CSPEC_ARR_DEDUCTION_RESULT "[]"
+#else
+# define CSPEC_ARR_DEDUCTION_RESULT "*"
+#endif
+
+  it("resolves an array type") {
+    int arr[] = { 1, 2 }; (void)arr;
+    type_string = _type_s(arr);
+    expected = "int"CSPEC_ARR_DEDUCTION_RESULT;
+  }
+
   it("resolves a char[] from string literal") {
     typeof("str") str = "str"; (void)str;
     type_string = _type_s(str);
-    expected = "char[]";
+    expected = "char"CSPEC_ARR_DEDUCTION_RESULT;
   }
 
   it("checks size_t") {
@@ -569,7 +575,7 @@ describe(matchers) {
       }
 
       it("uses 'to not' on a matcher that generates temporary") {
-        expect(4 to not be_between(2, 3));
+        expect(4.f to not be_between(2.f, 3.f, inclusive, float));
       }
 
       it("uses 'to be' in a basic context") {

@@ -38,6 +38,55 @@ describe(out_read_and_clear) {
     expect(length == 1u);
   }
 
+  it("is a temporary test to figure out pure _Generic auto_dup") {
+
+    typedef struct {
+      int x, y;
+    } ivec;
+    //*
+//#define NEW_DUP(NAME, VALUE) const void* NAME = &VALUE//passthrough(VALUE)
+//#undef NEW_DUP
+//#define NEW_DUP(NAME, VALUE) csByte NAME[sizeof(VALUE)]; cspec_memcpy(NAME, &VALUE, sizeof(VALUE));
+#undef _type_s_ptr_arr
+#define _type_s_ptr_arr(X, T) #T"*"
+#define NEW_DUP(NAME, VALUE) csByte NAME[sizeof((0,VALUE))]; \
+  _Generic(VALUE, \
+    char: cpyint, short: cpyint, int: cpyint, long: cpyint, long long: cpyint, \
+    unsigned char: cpyuint, unsigned short: cpyuint, unsigned: cpyuint, unsigned long: cpyuint, unsigned long long: cpyuint, \
+    float: cpyflt, double: cpyflt, default: cpyptr \
+  ) ( NAME, VALUE, sizeof((0,VALUE)) );
+
+
+#undef CSPEC_CUSTOM_TYPES
+#define CSPEC_CUSTOM_TYPES ivec*: "ivec*", ivec:"ivec",
+
+    char to_copy_[] = "blahdiblahdiblah";
+    char* to_copy_ptr = to_copy_;
+    const char* to_copy_const = "oh no, it's const";
+    //char* to_copy = to_copy_;
+    //void* to_copy = to_copy_;
+    //ivec to_copy = { .x = 1, .y = 2 };
+    //ivec* to_copy = &to_copy_2;
+
+    NEW_DUP(new_from_arr, "Hello");
+    NEW_DUP(new_from_arrv, to_copy_);
+    NEW_DUP(new_from_ptr, to_copy_ptr);
+    NEW_DUP(new_from_const, to_copy_const);
+
+    //csByte new_value[sizeof(to_copy)]; cspec_memcpy(new_value, &to_copy, sizeof(to_copy));
+
+    int x = 5;
+    expect(x, != , 5);
+
+    _test_fail_args(0, "Value: {}", _type_s("Hello"), new_from_arr);
+    _test_fail_args(0, "Value: {}", _type_s(to_copy_), new_from_arr);
+    _test_fail_args(0, "Value: {}", _type_s(to_copy_ptr), new_from_arr);
+    _test_fail_args(0, "Value: {}", _type_s(to_copy_const), new_from_const);
+#undef CSPEC_CUSTOM_TYPES
+#define CSPEC_CUSTOM_TYPES
+  //*/
+  }
+
   after {
     cspec_out_clear();
     csSize length = cspec_strlen(pOut);

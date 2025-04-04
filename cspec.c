@@ -251,6 +251,19 @@ csBool cspec_memeq(const void* a_, const void* b_, csSize n) {
   return TRUE;
 }
 
+int cspec_memcmp(const void* a_, const void* b_, csSize n) {
+  const csByte* a = a_;
+  const csByte* b = b_;
+  if (!n) return 0;
+  real_assert(a_ && b_);
+  while (n--) {
+    if (*a < *b) return -1;
+    if (*a > *b) return 1;
+    ++a, ++b;
+  }
+  return 0;
+}
+
 void cspec_memset(void* s_, csByte c, csSize n) {
   csByte* s = s_;
   if (!s) return;
@@ -332,6 +345,27 @@ int cspec_atoi(const char* s) {
   return result * sign;
 }
 #endif
+
+/*----------------------------------------------------------------------------*\
+  Default copy functions for type deduction level 1
+\*----------------------------------------------------------------------------*/
+
+void cpyint(void* dst, long long signed int src, csSize size) {
+  cspec_memcpy(dst, &src, size);
+}
+
+void cpyuint(void* dst, long long unsigned int src, csSize size) {
+  cspec_memcpy(dst, &src, size);
+}
+
+void cpyflt(void* dst, double src, csSize size) {
+  if (size == 4) { float f32 = (float)src; cspec_memcpy(dst, &f32, size); }
+  else cspec_memcpy(dst, &src, size);
+}
+
+void cpyptr(void* dst, const void* ptr, csSize size) {
+  cspec_memcpy(dst, &ptr, size);
+}
 
 /*----------------------------------------------------------------------------*\
   String Handling/Output
@@ -506,12 +540,15 @@ void cspec_out_ptr(const void* ptr) {
   long long unsigned int p = (long long unsigned int)ptr;
   _cspec_out_ch('0');
   _cspec_out_ch('x');
-  for (int i = 10; i --> 2;) {
+  csUint istart = test.out.index;
+  for (int i = sizeof(void*)*2; i --> 0;) {
     char c = p % 16;
     c += c >= 10 ? 'A'-10 : '0';
     _cspec_out_ch(c);
     p /= 16;
   }
+  csUint iend = test.out.index;
+  cspec_memrev(test.out.buffer + istart, 1, iend - istart);
   _cspec_out_fmt_continue();
 }
 
@@ -823,7 +860,8 @@ static csBool _cspec_log_param(const char* typ_N, const void* N) {
   ||  cspec_strrstr(typ_N, "unsigned char*")
   ||  cspec_strrstr(typ_N, "char[]")
   ) {
-    cspec_out_ch('"');
+    cspec_out_ptr(N);
+    cspec_out_str(": \"");
     cspec_out_str(*(const char**)N);
     cspec_out_ch('"');
   }
@@ -1627,6 +1665,7 @@ csBool _cspec_test_active(void) {
 }
 
 void _cspec_test_expcount(void) {
+  real_assert(test.in_function);
   ++test.pass.count_expects;
 }
 

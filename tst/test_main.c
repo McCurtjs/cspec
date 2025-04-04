@@ -41,8 +41,11 @@ int __attribute__((export_name("spec_main"))) spec_main(int argc, int line) {
 #else
 int main(int argc, char* argv[]) {
 #endif
-  //argv = (char*[]){ "BLAH", "-vs", "cspec_spec.c:151" };
-  //argc = 3;
+
+#ifdef CSPEC_MSVC
+  argv = (char*[]){ "BLAH", "-vsf", "cspec_spec.c:571" };
+  argc = 1;
+#endif
 
   TestSuite* test_suites[] = {
     &tests_libcs,
