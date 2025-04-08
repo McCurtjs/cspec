@@ -367,6 +367,11 @@ void cpyptr(void* dst, const void* ptr, csSize size) {
   cspec_memcpy(dst, &ptr, size);
 }
 
+csBool _cspec_streq(const char** A, const char** B, csSize unused) {
+  (void)unused;
+  return cspec_streq(*A, *B);
+}
+
 /*----------------------------------------------------------------------------*\
   String Handling/Output
 \*----------------------------------------------------------------------------*\
@@ -738,32 +743,32 @@ void cspec_log_start(void) {
   _cspec_log_start(S_NOMINAL);
 }
 
-void _cspec_log(int status, int line, const void* mem, const char* message) {
+csBool _cspec_log(int status, int line, const void* mem, const char* message) {
   if (test.in_progress) {
     switch (status) {
     case S_NOMINAL:
       if (!param.verbose || (test.current_line && test.current_line >= line))
-        return;
+        return TRUE;
       break;
 
     case S_WARNING:
-      if (test.current_line && test.current_line >= line) return;
+      if (test.current_line && test.current_line >= line) return TRUE;
       test.pass.warned = TRUE;
       break;
 
     case S_FAILURE:
       test.pass.failed = TRUE;
-      if (test.pass.expect_fail) return;
+      if (test.pass.expect_fail) return FALSE;
       break;
 
     case S_MEMFAIL:
       test.pass.memory_error = TRUE;
-      if (test.pass.expect_memory_error) return;
+      if (test.pass.expect_memory_error) return FALSE;
       break;
 
     case S_ASSERTS:
       test.pass.critical = TRUE;
-      if (test.pass.expect_assert) return;
+      if (test.pass.expect_assert) return FALSE;
       break;
     }
   }
@@ -819,6 +824,8 @@ void _cspec_log(int status, int line, const void* mem, const char* message) {
   }
 
   if (param.padding) cspec_out_print();
+
+  return status <= S_WARNING;
 }
 
 /*----------------------------------------------------------------------------*\
@@ -865,15 +872,20 @@ static csBool _cspec_log_param(const char* typ_N, const void* N) {
     cspec_out_str(*(const char**)N);
     cspec_out_ch('"');
   }
-  else if (cspec_strrstr(typ_N, "*")
+  else if (cspec_streq(typ_N, "c str")) {
+    /* for hard-coded c-strings passed to the logger */
+    cspec_out_str((const char*)N);
+  }
+  else if
+  (   cspec_strrstr(typ_N, "*")
   ||  cspec_strrstr(typ_N, "_ptr")
   ) {
     cspec_out_ptr(*(const void**)N);
   }
   else if (cspec_strrstr(typ_N, "[]")) {
     cspec_out_ptr(N);
-
-  } else if
+  }
+  else if
   (  cspec_streq(typ_N, "char")
   || cspec_streq(typ_N, "unsigned char")
   || cspec_streq(typ_N, "byte")

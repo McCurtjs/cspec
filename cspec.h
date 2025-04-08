@@ -114,28 +114,28 @@ typedef struct TestSuite {
 * \brief Note: This does not account for space for fences between allocations,
 *    the actual available space you can allocate will be lower.
 */
-#define memory_size_max 4096
-#define cspec_max_memory_pool_size 4096
+# define memory_size_max 4096
+# define cspec_max_memory_pool_size 4096
 #endif
 
 #ifndef cspec_max_memory_allocs
-#define cspec_max_memory_allocs 32
+# define cspec_max_memory_allocs 32
 #endif
 
 #ifndef cspec_max_line_length
-#define cspec_max_line_length 511
+# define cspec_max_line_length 511
 #endif
 
 #ifndef cspec_max_context_depth
-#define cspec_max_context_depth 10
+# define cspec_max_context_depth 10
 #endif
 
 #ifndef cspec_max_output_size
-#define cspec_max_output_size 511
+# define cspec_max_output_size 511
 #endif
 
 #ifndef cspec_out_float_precision
-#define cspec_out_float_precision 10
+# define cspec_out_float_precision 10
 #endif
 
 /*----------------------------------------------------------------------------*\
@@ -222,7 +222,7 @@ typedef struct TestSuite {
 * \brief As the entry point to the test runner program, also handles parsing and
 *   application of command line arguments.
 */
-#define cspec_run_all(suites)      _cspec_run_all_suites(suites)
+#define cspec_run_all(suites)     _cspec_run_all_suites(suites)
 
 /*----------------------------------------------------------------------------*\
   Contexts
@@ -278,7 +278,7 @@ typedef struct TestSuite {
 *
 * \param issue - String Literal: The error to print.
 */
-#define cspec_fail(issue)         _cspec_log(2, __LINE__, NULL, issue)
+#define cspec_fail(issue)         _cspec_fail(issue)
 
 /*
 * \brief Prints a block of test memory for debugging purposes.
@@ -538,72 +538,6 @@ typedef struct TestSuite {
 #define be_one(A)                 ((A) == 1)
 
 /*
-* \brief Not strictly a matcher, but syntax for readability around basic
-*   expressions in some situations, and to more readily match the "be" mode for
-*   container matching (all_be).
-*
-* \brief Example: `expect(subject to be( > , 7));`
-* \brief Example: `expect(function to be( == , 12) given(args));`
-*
-* \param x - The operator for the expression
-*
-* \param B - The right-hand-side of the expression
-*/
-#define be(x, B)                  x, B
-
-/*
-* \brief Alias for be( == , B)
-*
-* \brief Example: `expect(subject to equal(10));`
-* \brief Example: `expect(fn to equal(5) given(params));`
-*/
-#define equal(B)                  ==, B
-
-#define _match_fns(B) _Generic((B), \
-  char*: cspec_streq, const char*: cspec_streq, default: cspec_memeq \
-)
-
-/*
-* \brief Evaluates the result of a function given two arguments. This is
-*   functionally the same as `expect(function(subject, param_2))` except that
-*   it can deduce the types of and print the function arguments and result.
-*
-* \brief The intent with this is to check results of comparison functions,
-*   though it can be used for any function that takes two arguments, it is
-*   best suited for functions that check for equality of custom types (such as
-*   a function that checks equality of a string or vector).
-*
-* \brief Example: `expect(subject to match(param_2, function));`
-*
-* \param B - The value to test the subject against, second parameter to fn
-*
-* \param fn - The function to be called
-* 
-* TODO: Replace with generic call that deduces an equality function rather than
-*   manually specifying one. The default (unknown type) should use cspec_memeq
-*   for direct equality comparisons. This will work with basic types, struct
-*   types, and a mode for char* can be included that uses streq. Resulting
-*   expressions take the form: expect(lhs to match(rhs));
-* - Bonus round: have failed results print the funciton used.
-*/
-#define match(B, fn)              _fn_comp(fn, B)
-
-/*
-* \brief Can be used after a function or macro and a matcher or expression to
-*   call and test the function in a way that will be able to print out the
-*   result and parameters on test failure.
-*
-* \brief Value printing can handle up to nine arguments.
-*
-* \brief Example: `expect(my_fn to be( == , 4) given(param1, param2));`
-* \brief Example: `expect(my_fn to be_true given(lhs, rhs));`
-* \brief Example: `expect(my_fn to not be_negative given(param));`
-*
-* \param - list of parameters to pass to the function being tested
-*/
-#define given(...)                _given((__VA_ARGS__))
-
-/*
 * \brief This is a matcher that takes params and uses them to compose a more
 *   complex expectation for the test. It checks if the value is between a
 *   minimum and maximum bound.
@@ -655,6 +589,72 @@ typedef struct TestSuite {
 #ifndef cspec_epsilon
 # define cspec_epsilon 0.0001f
 #endif
+
+/*
+* \brief Not strictly a matcher, but syntax for readability around basic
+*   expressions in some situations, and to more readily match the "be" mode for
+*   container matching (all_be).
+*
+* \brief Example: `expect(subject to be( > , 7));`
+* \brief Example: `expect(function to be( == , 12) given(args));`
+*
+* \param x - The operator for the expression
+*
+* \param B - The right-hand-side of the expression
+*/
+#define be(x, B)                  x, B
+
+/*
+* \brief Alias for be( == , B)
+*
+* \brief Example: `expect(subject to equal(10));`
+* \brief Example: `expect(fn to equal(5) given(params));`
+*/
+#define equal(B)                  ==, B
+
+/*
+* \brief Evaluates the result of a function given two arguments. This is
+*   functionally the same as `expect(function(subject, param_2))` except that
+*   it can deduce the types of and print the function arguments and result.
+*
+* \brief The intent with this is to check results of comparison functions,
+*   though it can be used for any function that takes two arguments, it is
+*   best suited for functions that check for equality of custom types (such as
+*   a function that checks equality of a string or vector).
+*
+* \brief Example: `expect(subject to match(param_2, function));`
+*
+* \param B - The value to test the subject against, second parameter to fn
+*
+* \param fn - The function to be called
+*
+* TODO: Replace with generic call that deduces an equality function rather than
+*   manually specifying one. The default (unknown type) should use cspec_memeq
+*   for direct equality comparisons. This will work with basic types, struct
+*   types, and a mode for char* can be included that uses streq. Resulting
+*   expressions take the form: expect(lhs to match(rhs));
+* - Bonus round: have failed results print the funciton used.
+*/
+//*
+#define match(...)                  _fn_comp(__VA_ARGS__, _match_fn, 1, 0)
+/*/
+#define match(B, fn)                _fn_comp(B, fn)
+//*/
+
+/*
+* \brief Can be used after a function or macro and a matcher or expression to
+*   call and test the function in a way that will be able to print out the
+*   result and parameters on test failure.
+*
+* \brief Value printing can handle up to nine arguments.
+*
+* \brief Example: `expect(my_fn to be( == , 4) given(param1, param2));`
+* \brief Example: `expect(my_fn to be_true given(lhs, rhs));`
+* \brief Example: `expect(my_fn to not be_negative given(param));`
+*
+* \param - list of parameters to pass to the function being tested
+*/
+#define given(...)                _given((__VA_ARGS__))
 
 /*
 * \brief The `all` parameter is a composite matcher that applies the condition
@@ -1028,7 +1028,8 @@ void    _cspec_test_expcount(void);
 int     _cspec_test_directive(int mode, int param);
 csBool  _cspec_context_begin(int line, const char* desc);
 csBool  _cspec_context_end(int line);
-void    _cspec_log(int status, int line, const void* mem, const char* message);
+csBool  _cspec_streq(const char** A, const char** B, csSize x);
+csBool  _cspec_log(int status, int line, const void* mem, const char* message);
 void    _cspec_log_error(int line, const char* pfix, const char* fmt,
   const char* t_a0, const void* a0, const char* t_a1, const void* a1,
   const char* t_a2, const void* a2, const char* t_a3, const void* a3,
@@ -1037,7 +1038,7 @@ void    _cspec_log_error(int line, const char* pfix, const char* fmt,
   const char* t_a8, const void* a8, const char* t_a9, const void* a9
 );
 
-/* functions that only */
+/* functions to copy basic types for output type deduction in C11 mode */
 void cpyint(void* dst, long long signed int src, csSize size);
 void cpyuint(void* dst, long long unsigned int src, csSize size);
 void cpyflt(void* dst, double src, csSize size);
@@ -1055,7 +1056,7 @@ void cpyptr(void* dst, const void* src, csSize size);
 # define AUTO_DUP(NAME, VALUE) typeof((0, VALUE)) NAME = VALUE
 #elif CSPEC_USE_DEDUCTION == 1
 # ifndef CSPEC_CUSTOM_TYPES_CPYFN
-#  define CSPEC_CUSTOM_TYPES_CPYFN
+#   define CSPEC_CUSTOM_TYPES_CPYFN
 # endif
 # define AUTO_DUP(NAME, VALUE) csByte NAME[sizeof((0,VALUE))]; \
   _Generic(VALUE, CSPEC_CUSTOM_TYPES_CPYFN \
@@ -1066,33 +1067,43 @@ void cpyptr(void* dst, const void* src, csSize size);
 #
 #else /* CSPEC_USE_DEDUCTION == 0 */
 # define AUTO_DUP(NAME, VALUE) _Static_assert(0, "Type deduction not supported")
-# define _deduct_warn(EXP_STR) _test_warn("output type deduction is disabled"); _test_warn("use `"EXP_STR"` for value display");
+# define _deduct_warn(EXP_STR) cspec_warn("output type deduction is disabled"); cspec_warn("use `"EXP_STR"` for value display");
 #endif
 
 #if CSPEC_USE_DEDUCTION > 0
+#
 # ifndef CSPEC_CUSTOM_TYPES
-#  define CSPEC_CUSTOM_TYPES
+#   define CSPEC_CUSTOM_TYPES
 # endif
 #
-# /* # define _type_s_ptr_arr(X, T) _Generic(&(X), T**: #T"*", default: #T"[]" ) // this version works in C11, but not for literals */
-# /* # define _type_s_ptr_arr(X, T) _Generic((X), typeof(X): #T"*", default: #T"[]") */
+# ifndef CSPEC_CUSTOM_MATCHES
+#   define CSPEC_CUSTOM_MATCHES
+# endif
 #
 # if CSPEC_USE_DEDUCTION == 1
-#  /* Without typeof, we're not able to differentiate between arrays and pointers, so we'll just decay to pointers */
-#  define _type_s_ptr_arr(X, T) #T"*"
+#   /* Without typeof, we're not able to differentiate between arrays and pointers, so we'll just decay to pointers */
+#   define _type_s_ptr_arr(X, T) #T"*"
+#   define _match_fn(A, B) _Generic((A), CSPEC_CUSTOM_MATCH_FNS char*: cspec_streq, const char* cspec_streq)
 # else
-#  ifdef CSPEC_MSVC
-#   /* MSVC has an issue that sometimes causes _Generic to throw a warning that a variable was initialized but not used. */
-#   pragma warning ( disable : 4189 )
-#   /* Technically legal, but trips warning "unreachable-code-generic-assoc" in CLang */
-#   define _type_s_ptr_arr(X, T) _Generic((X), typeof(X): #T"*", default: #T"[]")
-#  else
-#   /* Also legal, but trips E0029 "Expected an expression" in MSVC */
-#   /* the NULL is important with GCC to make sure the control expression is actually an expression and not just a type. */
-#   define _type_s_ptr_arr(X, T) _Generic((typeof(X)*)NULL, T**: #T"*", default: #T"[]")
-#  endif
+#   /* Selector to choose equality functions for the automatic "match" matcher */
+#   define _match_fn(A, B) _Generic((A), CSPEC_CUSTOM_MATCH_FNS            \
+      char*: _cspec_streq, const char*: _cspec_streq, default: cspec_memeq \
+    ) (&A, &B, sizeof(A))                                               /**/
+#
+#   ifdef CSPEC_MSVC
+#     /* MSVC has an issue that sometimes causes _Generic to throw a warning that a variable was initialized but not used. */
+#     pragma warning ( disable : 4189 )
+#     /* Technically legal, but trips warning "unreachable-code-generic-assoc" in CLang */
+#     define _type_s_ptr_arr(X, T) _Generic((X), typeof(X): #T"*", default: #T"[]")
+#   else
+#     /* Also legal, but trips E0029 "Expected an expression" in MSVC */
+#     /* the NULL is important with GCC to make sure the control expression is actually an expression and not just a type. */
+#     define _type_s_ptr_arr(X, T) _Generic((typeof(X)*)NULL, T**: #T"*", default: #T"[]")
+#   endif
 # endif
 # define _type_s_h(X, T) T: #T, T*: _type_s_ptr_arr(X, T), const T*: _type_s_ptr_arr(X, const T)
+/* Adding a 'default' field can allow custom types to be used in an "expect fn to be_something given(custom1, custom2)" */
+/*  format, but then it won't be obvious that the type is not supported, and the output will not be useful              */
 //*
 # define _type_s(X) _Generic((X), void*: "void*", const void*: "const void*",                                         \
   CSPEC_CUSTOM_TYPES   _type_s_h(X, _Bool),                                                                           \
@@ -1100,11 +1111,9 @@ void cpyptr(void* dst, const void* src, csSize size);
   _type_s_h(X, unsigned char), _type_s_h(X, unsigned short),      _type_s_h(X, unsigned int),                         \
   _type_s_h(X, unsigned long), _type_s_h(X, unsigned long long),  _type_s_h(X, float),  _type_s_h(X, double)          \
 )
-// Adding a 'default' field can allow custom types to be used in an "expect fn to be_something given(custom1, custom2)" format
-//    but then it won't be obvious that the type is not supported, and the output will not be useful
 /*/
-// abridged version that's easier on the visual studio macro previewer, lol
 # if 0
+// abridged version that's easier on the visual studio macro previewer, lol
 #  define _type_s(X) _Generic((X),                                            \
   CSPEC_CUSTOM_TYPES                _Bool:              "bool",               \
   _type_s_h(X, char),               _type_s_h(X, int),                        \
@@ -1142,10 +1151,10 @@ void cpyptr(void* dst, const void* src, csSize size);
 # define _param_fn_arg(...) _csva_exp(_param_arg, _param_mty, __VA_ARGS__)
 # define _param_fn_str(...) _csva_exp(_param_mty, _param_str, __VA_ARGS__)
 #
-# define _test_fail_comp(S) { _test_fail_args("expected "S, "%n\nreceived {}", _type_s(_R), (void*)&_R); return; }
+# define _test_fail_comp(S)             { _test_fail_args("expected "S, "%n\nreceived {}", _type_s(_R), (void*)&_R); return; }
+# define _test_fail_mtch(F, A, B, o)    { _test_fail_args("expected "#A" to match "#B, "{}%n\nvalue 1: {}\nvalue 2: {}", "c str", (o ? " using "#F : ""), _type_s(_A), (void*)&_A, _type_s(_B), (void*)&_B); return; }
 # define _test_fail_fn_expr(F, x, B, P) { _test_fail_args("expected X "#x" "#B" where X == "#F#P, "%n\nreceived {} "#x" {}" _param_fn_str P, _type_s(_R), (void*)&_R, _type_s(_B), (void*)&_B, _param_fn_arg P 0); return; }
 # define _test_fail_fn_comp(S, P)       { _test_fail_args("expected "S, "%n\nreceived {}" _param_fn_str P, _type_s(_R), (void*)&_R, _param_fn_arg P 0); return; }
-# define _test_fail_fn_true(F, A, B)    { _test_fail_args("expected to pass "#F"("#A", "#B")", "%n\nparam 1: {}\nparam 2: {}", _type_s(_A), (void*)&_A, _type_s(_B), (void*)&_B); return; }
 #
 #endif
 
@@ -1163,9 +1172,7 @@ void cpyptr(void* dst, const void* src, csSize size);
 #define _test_group(TEST_FN) { .line = &_fn_line_##TEST_FN, .header=#TEST_FN, .group_fn = test_##TEST_FN }
 #define _test_suite_end { .line = NULL, .group_fn = NULL } })
 
-#define _test_log(message) _cspec_log(0, __LINE__, NULL, message)
-#define _test_warn(message) _cspec_log(1, __LINE__, NULL, message)
-#define _test_fail(issue) do { _cspec_log(2, __LINE__, NULL, issue); return; } while(0)
+#define _cspec_fail(issue) do { _cspec_log(2, __LINE__, NULL, issue); return; } while(0)
 
 #define _test_fail_args_va(S,fmt,A,a,B,b,C,c,D,d,E,e,F,f,G,g,H,h,I,i,J,j,...) _cspec_log_error(__LINE__,S,fmt,A,a,B,b,C,c,D,d,E,e,F,f,G,g,H,h,I,i,J,j)
 #define _test_fail_args(S, /* fmt, */ ...) _test_fail_args_va(S,__VA_ARGS__,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0)
@@ -1182,19 +1189,20 @@ void cpyptr(void* dst, const void* src, csSize size);
 #if CSPEC_USE_DEDUCTION > 1
 # define _expect_fn_expr(S, F, x, B, P, ...)  AUTO_DUP(_R , (F P)); AUTO_DUP(_B    , (B));  _param_fn_def P   if (!(_R x _B))   _test_fail_fn_expr(F, x, B, P)
 # define _expect_fn_comp(S, F, M, P, ...)     AUTO_DUP(_R , (F P)); csBool   _test = M(_R); _param_fn_def P   if (!_test)       _test_fail_fn_comp(S, P)
-# define _expect_fn_true(S, A, F, B, ...)     AUTO_DUP(_A , (A));   AUTO_DUP(_B    , (B));                    if (!(F(_A, _B))) _test_fail_fn_true(F, A, B)
+# define _expect_mtch(S, A, F, B, o, ...)     AUTO_DUP(_A , (A));   AUTO_DUP(_B    , (B));                    if (!(F(_A, _B))) _test_fail_mtch(F, A, B, o)
 # define _expect_expr(S, A, x, B, ...)        AUTO_DUP(_A , (A));   AUTO_DUP(_B    , (B));                    if (!(_A x _B))   _test_fail_t(A, x, B, _type_s(_A), _type_s(_B))
 # define _expect_comp(S, A, F, ...)           AUTO_DUP(_R , (A));   csBool   _test = F(_R);                   if (!_test)       _test_fail_comp(S)
 #else
 # define _expect_fn_expr(S, F, x, B, P, ...)                        csBool   _test = ((F P) x (B));           if (!_test)       _test_fail("expected X "#x" "#B" where X == "#F#P)
 # define _expect_fn_comp(S, F, M, P, ...)                           csBool   _test = M((F P));                if (!_test)       _test_fail("expected "S)
-# define _expect_fn_true(S, A, F, B, ...)                                                                     if (!(F(A, B)))   _test_fail("expected to pass "#F"( "#A", "#B" )")
 # if CSPEC_USE_DEDUCTION == 0
-#  define _expect_expr(S, A, x, B, ...)       _deduct_warn("expect(lhs, "#x" , rhs, type)");                  if (!(A x B))     _test_fail("expected "#A" "#x" "#B)
-#  define _expect_comp(S, A, F, ...)                                csBool   _test = F(A);                    if (!_test)       _test_fail("expected "S)
+#   define _expect_expr(S, A, x, B, ...)      _deduct_warn("expect(lhs, "#x" , rhs, type)");                  if (!(A x B))     _test_fail("expected "#A" "#x" "#B)
+#   define _expect_mtch(S, A, F, B, ...)                            csBool   _test = F((A), (B));             if (!_test)       _test_fail("expected to pass "#F"( "#A", "#B" )")
+#   define _expect_comp(S, A, F, ...)                               csBool   _test = F(A);                    if (!_test)       _test_fail("expected "S)
 # else
-#  define _expect_expr(S, A, x, B, ...)       if (!((A) x (B))) {   AUTO_DUP(_A,    (A)); AUTO_DUP(_B, (B));  _test_fail_args("expected "#A" "#x" "#B, "%n\nreceived {} "#x" {}", _type_s(A), _A, _type_s(B), _B); return; }
-#  define _expect_comp(S, A, F, ...)          csBool   _test = F(A); if (!_test) {        AUTO_DUP(_R, (A));  _test_fail_args("expected "S, "%n\nreceived {}",                    _type_s(A), _R); return; }
+#   define _expect_expr(S, A, x, B, ...)                                    if (!((A) x (B))) { AUTO_DUP(_A, (A)); AUTO_DUP(_B, (B)); _test_fail_args("expected "#A" "#x" "#B, "%n\nreceived {} "#x" {}",                                            _type_s(A), _A, _type_s(B), _B); return; }
+#   define _expect_mtch(S, A, F, B, o, ...)   csBool   _test = F((A), (B)); if (!_test)       { AUTO_DUP(_A, (A)); AUTO_DUP(_B, (B)); _test_fail_args("expected "#A" to match "#B, "{}%n\nvalue 1: {}\nvalue 2: {}", "c str", (o ? "using "#F : ""), _type_s(A), _A, _type_s(B), _B); return; }
+#   define _expect_comp(S, A, F, ...)         csBool   _test = F(A);        if (!_test)       { AUTO_DUP(_R, (A));                    _test_fail_args("expected "S, "%n\nreceived {}",                                                               _type_s(A), _R); return; }
 # endif
 #endif
 #define _expect_comp_all(S, A, E, B, x, T, F, ...)                  csBool   _test = F(A, B, E, x);           if (!_test)       _test_fail_all(S, T)
@@ -1202,7 +1210,7 @@ void cpyptr(void* dst, const void* src, csSize size);
 #define _expect_type1(S, A, x, B, T, ...)     T        _A = (A);    T        _B    = (B);                     if (!(_A x _B))   _test_fail_t(A, x, B, #T, #T)
 #define _expect_true(S, A, ...)                                                                               if (!(A))         _test_fail("expected "S)
 #define _expect_va(S, U, V, W, X, Y, Z,_0,_1,_2, F, ...) do { _cspec_test_expcount(); _expect##F(S, U, V, W, X, Y, Z); } while(0)
-#define _expect(S, ...) _expect_va(S, __VA_ARGS__, _fn_expr, _fn_comp, _fn_true, _comp_all, _type2, _type1, _expr, _comp, _true)
+#define _expect(S, ...) _expect_va(S, __VA_ARGS__, _fn_expr, _fn_comp, _mtch, _comp_all, _type2, _type1, _expr, _comp, _true)
 
 #define _all_comp_part(A, FOREACH, MATCHER, EXPECTED) FOREACH(_iter_all, _loop_all, A) { _test = MATCHER; if (!_test) { _index = _loop_all; _pvalue = _iter_all; EXPECTED break; } } _test ^= _tmp
 #define _all_comp(A, B, FOREACH, M)       _all_comp_part(A, FOREACH, M(*_iter_all), )
@@ -1213,11 +1221,11 @@ void cpyptr(void* dst, const void* src, csSize size);
 #define _all(M, T_el, T_con, ...)                   _all_setup(T_el)  FALSE;  T_el* T_con##_foreach_index, 0, M, T_el, _all_comp
 #define _all_be(x, B, T_el, T_con)                  _all_setup(T_el)  TRUE;   T_el* T_con##_foreach_index, B, x, T_el, _all_be_comp
 #define _all_match(F, B, T_el, T_con, ...)          _all_setup(T_el)  TRUE;   T_el* T_con##_foreach_index, B, F, T_el, _all_match_comp
-#define _all_match2(F, B, T_el, T_arg, T_con, ...)  _all_setup(T_arg) TRUE;   T_el* T_con##_foreach_index, B, F, T_el, _all_match_comp
+//#define _all_match2(F, B, T_el, T_arg, T_con, ...)  _all_setup(T_arg) TRUE;   T_el* T_con##_foreach_index, B, F, T_el, _all_match_comp
 
 #define _all_va(matcher, B, T_el, T_argcon, T_con, F, ...) F(matcher, B, T_el, T_argcon, T_con)
 
-#define _fn_comp(fn, B) fn, B, 0, 0, 0, 0
+#define _fn_comp(B, fn, _, o, ...) fn, B, o, 0, 0, 0 /* value of 'o' determines if we print the function name or not */
 #define _given(ARGS) , ARGS, 0, 0, 0, 0, 0
 
 #define _matcher_setup(B, C, T) FALSE; T _B = (B); T _C = (C); T _A =

@@ -29,6 +29,12 @@ describe(deduction) {
   /* ignore these tests if not >= C11 */
 #if CSPEC_USE_DEDUCTION > 0
 
+#if CSPEC_USE_DEDUCTION > 1
+# define CSPEC_ARR_DEDUCTION_RESULT "[]"
+#else
+# define CSPEC_ARR_DEDUCTION_RESULT "*"
+#endif
+
   int x = 0;
   char* type_string = NULL;
   char* expected = NULL;
@@ -56,12 +62,6 @@ describe(deduction) {
     expected = "char*";
   }
 
-#if CSPEC_USE_DEDUCTION > 1
-# define CSPEC_ARR_DEDUCTION_RESULT "[]"
-#else
-# define CSPEC_ARR_DEDUCTION_RESULT "*"
-#endif
-
   it("resolves an array type") {
     int arr[] = { 1, 2 }; (void)arr;
     type_string = _type_s(arr);
@@ -80,7 +80,8 @@ describe(deduction) {
   }
 
   after{
-    expect(type_string to match(expected, cspec_streq));
+    expected = "Nothing will match this";
+    expect(type_string to match(expected));
   }
 
 #endif
