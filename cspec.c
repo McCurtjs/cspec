@@ -368,7 +368,7 @@ void cpyptr(void* dst, const void* ptr, csSize size) {
   cspec_memcpy(dst, &ptr, size);
 }
 
-csBool _cspec_streq(const char** A, const char** B, csSize _0, csSize _1) {
+csBool _cspec_streq(const char*const * A, const char*const * B, csSize _0, csSize _1) {
   (void)_0;
   (void)_1;
   return cspec_streq(*A, *B);
@@ -1856,8 +1856,9 @@ static csBool _cspec_run_args(int argc, char* argv[]) {
   Test Runners
 \*----------------------------------------------------------------------------*/
 
+static int _cspec_param_set_line = 0;
 void cspec_set_line(int line) {
-  param.line = line;
+  _cspec_param_set_line = line;
 }
 
 static void _cspec_before_group(const TestGroup* t) {
@@ -1926,6 +1927,8 @@ int _cspec_run_all(int count, TestSuite* suites[], int argc, char* argv[]) {
   cspec_memset(&test, 0, sizeof(test));
   cspec_memset(&param, 0, sizeof(param));
   param.tabsize = DEFAULT_TABSIZE;
+  param.line = _cspec_param_set_line;
+  _cspec_param_set_line = 0;
 
   if (_cspec_run_args(argc, argv)) {
     return 0;

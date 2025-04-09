@@ -1024,7 +1024,7 @@ void    _cspec_test_expcount(void);
 int     _cspec_test_directive(int mode, int param);
 csBool  _cspec_context_begin(int line, const char* desc);
 csBool  _cspec_context_end(int line);
-csBool  _cspec_streq(const char** A, const char** B, csSize, csSize);
+csBool  _cspec_streq(const char* const * A, const char* const * B, csSize, csSize);
 csBool  _cspec_log(int status, int line, const void* mem, const char* message);
 void    _cspec_log_error(int line, const char* pfix, const char* fmt,
   const char* t_a0, const void* a0, const char* t_a1, const void* a1,
@@ -1098,7 +1098,7 @@ void cpyptr(void* dst, const void* src, csSize size);
 #   /* Selector to choose equality functions for the automatic "match" matcher */
 #   define _match_fn(A, B) _Generic((A), CSPEC_CUSTOM_MATCH_FNS             \
       char*: _cspec_streq, const char*: _cspec_streq, default: cspec_memeq  \
-    ) (&A, &B, sizeof(A), sizeof(B))                                     /**/
+    ) ((void*)&A, (void*)&B, sizeof(A), sizeof(B))                       /**/
 #
 #   ifdef CSPEC_MSVC
 #     /* MSVC has an issue that sometimes causes _Generic to throw a warning that a variable was initialized but not used. */

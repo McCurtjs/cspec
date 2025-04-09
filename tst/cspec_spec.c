@@ -26,9 +26,6 @@
 
 describe(deduction) {
 
-  char* type_string = NULL;
-  char* expected = NULL;
-
   /* ignore these tests if not >= C11 */
 #if CSPEC_USE_DEDUCTION > 0
 
@@ -38,6 +35,8 @@ describe(deduction) {
 # define CSPEC_ARR_DEDUCTION_RESULT "*"
 #endif
 
+  char* type_string = NULL;
+  char* expected = NULL;
   int x = 0;
 
   it("resolves a type") {
@@ -78,12 +77,6 @@ describe(deduction) {
   it("checks size_t") {
     csSize s = sizeof(csSize);
     expect(s, == , sizeof(void*), csSize);
-  }
-#else
-
-  it("fails to use the matcher") {
-    type_string = "Test";
-    expected = "Test";
   }
 
   after {
