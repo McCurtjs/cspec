@@ -71,27 +71,27 @@ struct test_vec {
 describe(cspec_memeq) {
 
   it("returns true given two null pointers") {
-    expect(cspec_memeq to be_true given(NULL, NULL, 5));
+    expect(cspec_memeq to be_true given(NULL, NULL, 5, 5));
   }
 
   it("returns false when trying to compare valid memory with null") {
-    int test = 7;
-    expect(cspec_memeq to be_false given(NULL, &test, sizeof(test)));
-    expect(cspec_memeq to be_false given(&test, NULL, sizeof(test)));
+    int tst = 7;
+    expect(cspec_memeq to be_false given(NULL, &tst, sizeof(tst), sizeof(tst)));
+    expect(cspec_memeq to be_false given(&tst, NULL, sizeof(tst), sizeof(tst)));
   }
 
   it("can compare basic types") {
     int A = 5, B = 5;
-    expect(cspec_memeq to be_true given(&A, &B, sizeof(A)));
+    expect(cspec_memeq to be_true given(&A, &B, sizeof(A), sizeof(B)));
     B = 8;
-    expect(cspec_memeq to be_false given(&A, &B, sizeof(A)));
+    expect(cspec_memeq to be_false given(&A, &B, sizeof(A), sizeof(B)));
   }
 
   it("can compare structure types") {
     struct test_vec v1 = { 4, 5 }, v2 = { 4, 5 };
-    expect(cspec_memeq to be_true given(&v1, &v2, sizeof(v1)));
+    expect(cspec_memeq to be_true given(&v1, &v2, sizeof(v1), sizeof(v2)));
     v2.x = 5;
-    expect(cspec_memeq to be_false given(&v1, &v2, sizeof(v1)));
+    expect(cspec_memeq to be_false given(&v1, &v2, sizeof(v1), sizeof(v2)));
   }
 
 }
@@ -119,7 +119,7 @@ describe(cspec_memcpy) {
     struct test_vec D = { 0 };
     cspec_memcpy(&D, &S, sizeof(struct test_vec));
     //expect(D to match(S));
-    expect(cspec_memeq to be_true given(&D, &S, sizeof(S)));
+    expect(cspec_memeq to be_true given(&D, &S, sizeof(S), sizeof(D)));
   }
 
 }
@@ -150,8 +150,9 @@ describe(cspec_memrev) {
 
     it("includes the whole memory range") {
       cspec_memrev(buffer, 1, sizeof(buffer));
+      csSize bsize = sizeof(buffer);
       expect(cspec_streq to be_true given(buffer, ""));
-      expect(cspec_memeq to be_true given(buffer, "\0esreveR", sizeof(buffer)));
+      expect(cspec_memeq to be_true given(buffer, "\0esreveR", bsize, bsize));
     }
 
   }

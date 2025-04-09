@@ -240,9 +240,10 @@ csBool cspec_isprint(int c) {
   return c > 0x1F && c < 0x7F;
 }
 
-csBool cspec_memeq(const void* a_, const void* b_, csSize n) {
+csBool cspec_memeq(const void* a_, const void* b_, csSize n, csSize nb) {
   const csByte* a = a_;
   const csByte* b = b_;
+  if (n != nb) return FALSE;
   if (a == b) return TRUE;
   if (!a || !b) return FALSE;
   while (n--)
@@ -367,8 +368,9 @@ void cpyptr(void* dst, const void* ptr, csSize size) {
   cspec_memcpy(dst, &ptr, size);
 }
 
-csBool _cspec_streq(const char** A, const char** B, csSize unused) {
-  (void)unused;
+csBool _cspec_streq(const char** A, const char** B, csSize _0, csSize _1) {
+  (void)_0;
+  (void)_1;
   return cspec_streq(*A, *B);
 }
 
@@ -734,7 +736,7 @@ static void _cspec_log_start(Status status) {
     default: color = CONCOL_White; break;
   }
 
-  PrintLevel level = (status == S_NOMINAL ? P_LOGGED : P_ERROR);
+  PrintLevel level = (status <= S_WARNING ? P_LOGGED : P_ERROR);
   _cspec_log_headers(color, level, NULL);
   cspec_out_pad(test.out.tabstop, ' ');
 }
@@ -875,6 +877,8 @@ static csBool _cspec_log_param(const char* typ_N, const void* N) {
   else if (cspec_streq(typ_N, "c str")) {
     /* for hard-coded c-strings passed to the logger */
     cspec_out_str((const char*)N);
+    cspec_out_fmt_end();
+    return FALSE;
   }
   else if
   (   cspec_strrstr(typ_N, "*")
