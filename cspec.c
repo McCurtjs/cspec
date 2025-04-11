@@ -745,32 +745,32 @@ void cspec_log_start(void) {
   _cspec_log_start(S_NOMINAL);
 }
 
-csBool _cspec_log(int status, int line, const void* mem, const char* message) {
+int _cspec_log_fmt_start(int status, int line) {
   if (test.in_progress) {
     switch (status) {
     case S_NOMINAL:
       if (!param.verbose || (test.current_line && test.current_line >= line))
-        return TRUE;
+        return 0;
       break;
 
     case S_WARNING:
-      if (test.current_line && test.current_line >= line) return TRUE;
+      if (test.current_line && test.current_line >= line) return 0;
       test.pass.warned = TRUE;
       break;
 
     case S_FAILURE:
       test.pass.failed = TRUE;
-      if (test.pass.expect_fail) return FALSE;
+      if (test.pass.expect_fail) return 0;
       break;
 
     case S_MEMFAIL:
       test.pass.memory_error = TRUE;
-      if (test.pass.expect_memory_error) return FALSE;
+      if (test.pass.expect_memory_error) return 0;
       break;
 
     case S_ASSERTS:
       test.pass.critical = TRUE;
-      if (test.pass.expect_assert) return FALSE;
+      if (test.pass.expect_assert) return 0;
       break;
     }
   }
@@ -785,14 +785,25 @@ csBool _cspec_log(int status, int line, const void* mem, const char* message) {
 
   if (status == S_MEMFAIL) {
     cspec_out_str("memory error: ");
-  } else if (line > 0) {
+  }
+  else if (line > 0) {
     cspec_out_fmt("Line {}: ");
     cspec_out_int(line);
     test.out.tabstop = test.out.index;
     cspec_out_str("%c");
-  } else if (status == S_WARNING) {
+  }
+  else if (status == S_WARNING) {
     cspec_out_str("%c");
   }
+
+  return old_stop;
+}
+
+void _cspec_log(int status, int line, const void* mem, const char* message) {
+
+  csUint old_stop = _cspec_log_fmt_start(status, line);
+
+  if (old_stop == 0) return;
 
   if (message) {
     cspec_out_str(message);
@@ -826,8 +837,6 @@ csBool _cspec_log(int status, int line, const void* mem, const char* message) {
   }
 
   if (param.padding) cspec_out_print();
-
-  return status <= S_WARNING;
 }
 
 /*----------------------------------------------------------------------------*\
@@ -989,8 +998,8 @@ static csBool _cspec_log_param(const char* typ_N, const void* N) {
   return TRUE;
 }
 
-void _cspec_log_error(
-  int line, const char* pre, const char* fmt,
+void _cspec_log_fmt_exp(
+  int status, int line, const char* fmt,
   const char* t_arg0, const void* arg0,
   const char* t_arg1, const void* arg1,
   const char* t_arg2, const void* arg2,
@@ -1002,23 +1011,11 @@ void _cspec_log_error(
   const char* t_arg8, const void* arg8,
   const char* t_arg9, const void* arg9
 ) {
-  csBool test_fail_prev = test.pass.failed;
+  if (!fmt) return;
 
-  if (!test.in_progress) return;
-  test.pass.failed = TRUE;
-  if (test.pass.expect_fail) return;
+  csUint old_stop = _cspec_log_fmt_start(status, line);
 
-  _cspec_log_headers(CONCOL_Red, P_ERROR, NULL);
-
-  cspec_out_pad(test.out.tabstop, ' ');
-  if (!test_fail_prev) {
-    cspec_out_fmt("line {}: ");
-    cspec_out_int(line);
-    test.out.tabstop = test.out.index;
-  }
-  cspec_out_str(pre);
-
-  if (!fmt) goto finish;
+  if (old_stop == 0) return;
 
   cspec_out_fmt(fmt);
 
@@ -1033,13 +1030,16 @@ void _cspec_log_error(
   if (t_arg8) _cspec_log_param(t_arg8, arg8);
   if (t_arg9) _cspec_log_param(t_arg9, arg9);
 
-finish:
+  if (status == S_WARNING) {
+    ConsoleColor color = test.pass.warned ? CONCOL_Yellow : CONCOL_bYellow;
+    _cspec_out_print(color);
+  } else {
+    cspec_out_print();
+  }
 
-  cspec_out_print();
-
-  /* print empty line for padding */
   if (param.padding) cspec_out_print();
 }
+
 #endif
 
 /*----------------------------------------------------------------------------*\
