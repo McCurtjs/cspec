@@ -627,6 +627,13 @@ describe(function_matchers) {
       expect(str to match("Test string", cspec_streq));
     }
 
+    it("uses the 'match' matcher to compare variables with the default match fn") {
+      int x = 5, y = 5;
+      expect(x to match(y));
+      y = 6;
+      expect(x to not match(y));
+    }
+
     it("uses the 'given' composition with a matcher to make the same comparison") {
       expect(cspec_streq to be_true given(str, "Test string"));
     }
@@ -644,6 +651,16 @@ describe(function_matchers) {
   context("tests fail") {
 
     expect(to_fail);
+
+    it("should print 'expected a TO match b'") {
+      int a = 1, b = 2;
+      expect(a to match(b));
+    }
+
+    it("should print 'expected a to NOT match b'") {
+      int a = 1, b = 1;
+      expect(a to not match(b));
+    }
 
     it("uses the 'match' matcher to compose a string comparison") {
       expect(str to match("Test strong", cspec_streq));
