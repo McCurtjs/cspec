@@ -691,19 +691,38 @@ describe(container_matchers) {
     context("tests succeed") {
 
       it("contains only positive values") {
-        expect(arr to all(be_positive, int, c_array));
+        expect(arr to all(be_positive, c_array));
+
+        expect(arr to all(be_positive)); // type deduction, auto c_array
+        expect(arr to all(be_positive, c_array)); // type deduction, explicit container type
+        expect(arr to all(be_positive, c_array of int)); // explicit container and type
+
+        expect(arr to all(be_within(2 of 5)));
+
+        expect(arr to all_be( < , 10));
+        expect(arr to all_be( < , 10, c_array));
+        expect(arr to all_be( < , 10, c_array of int));
+
+        int X = 10, Y = 9;
+
+        expect(X to match(Y));
+
+        expect(arr to all_match(X)); // type deduction, auto c_array
+        expect(arr to all_match(X, c_array)); // type deduction, explicit container type
+        expect(arr to all_match(X, c_array, int)); // explicit container and type
+        expect(arr to all_match(X, c_array, int, fn)); // explicit container and type
       }
 
       context("a negative number is added to the array [..., -1]") {
         int arr2[] = { 3, 5, 7, -1 };
 
         it("does not contain only positive values") {
-          expect(arr2 to not all(be_positive, int, c_array));
+          expect(arr2 to not all(be_positive, c_array, int));
         }
       }
 
       it("contains values within 2 of 5") {
-        expect(arr to all(be_within(2 of 5), int, c_array));
+        expect(arr to all(be_within(2 of 5)));
       }
 
       it("contains values that are not all within 2 of 6") {
