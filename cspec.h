@@ -1092,6 +1092,7 @@ void cpyptr(void* dst, const void* src, csSize size);
 # if CSPEC_USE_DEDUCTION == 1
 #   /* Without typeof, we're not able to differentiate between arrays and pointers, so we'll just decay to pointers */
 #   define _type_s_ptr_arr(X, T) #T"*"
+#
 #   /* Without typeof, we can still direct to the correct match functions, but our copied values are stored in char arrays */
 #   define _match_fn(A, B) _Generic((A), CSPEC_CUSTOM_MATCH_FNS             \
       char*: _cspec_streq, const char*: _cspec_streq, default: cspec_memeq  \
@@ -1105,6 +1106,7 @@ void cpyptr(void* dst, const void* src, csSize size);
 #   ifdef CSPEC_MSVC
 #     /* MSVC has an issue that sometimes causes _Generic to throw a warning that a variable was initialized but not used. */
 #     pragma warning ( disable : 4189 )
+#
 #     /* Technically legal, but trips warning "unreachable-code-generic-assoc" in CLang */
 #     define _type_s_ptr_arr(X, T) _Generic((X), typeof(X): #T"*", default: #T"[]")
 #   else
@@ -1170,6 +1172,11 @@ void cpyptr(void* dst, const void* src, csSize size);
 #
 #endif
 
+#define _pick_0(a,b,c,d) a
+#define _pick_1(a,b,c,d) b
+#define _pick_2(a,b,c,d) c
+#define _pick_3(a,b,c,d) d
+
 #define _loop_ctx MACRO_CONCAT(_loop_ctx_, __LINE__)
 #define _iter_all MACRO_CONCAT(_iter_all_, __LINE__)
 #define _loop_all n
@@ -1199,6 +1206,13 @@ void cpyptr(void* dst, const void* src, csSize size);
     return;                                                                                                                                               \
   } }                                                                                                                                                  /**/
 
+#define _cspec_type_sel(T, A, C) T
+#if CSPEC_USE_DEDUCTION > 1
+# define _cspec_type_def(T, A, C) typeof((0, (C##_first(A))))
+#else
+# define _cspec_type_def(T, A, C) int
+#endif
+
 #if CSPEC_USE_DEDUCTION > 1
 # define _expect_fn_mtch(S, A, n, F, B, u, ...)
 # define _expect_fn_expr(S, F, x, B, P, ...)          AUTO_DUP(_R , (F P)); AUTO_DUP(_B    , (B));    _param_fn_def P       if (!(_R x _B))       _test_fail_fn_expr(F, x, B, P)
@@ -1227,50 +1241,22 @@ void cpyptr(void* dst, const void* src, csSize size);
 #define _expect_va(S, U, V, W, X, Y, Z, C,_0,_1,_2,_3,_4, F, ...) do { _cspec_test_expcount(); _expect##F(S, U, V, W, X, Y, Z, C); } while(0)
 #define _expect(S, ...) _expect_va(S, __VA_ARGS__, _fn_mtch, ><, ><, _fn_expr, _fn_comp, _all, _mtch, _type2, _type1, _expr, _comp, _true)
 
-#define _all_comp_part(A, FOREACH, MATCHER, EXPECTED) FOREACH(_iter_all, _loop_all, A) { _test = MATCHER; if (!_test) { _index = _loop_all; _pvalue = _iter_all; EXPECTED break; } } _test ^= _tmp
-#define _all_comp(A, B, FOREACH, M)       _all_comp_part(A, FOREACH, M(*_iter_all), )
-#define _all_be_comp(A, B, FOREACH, x)    _all_comp_part(A, FOREACH, ((*_iter_all) x (B)),  _expected = (B);)
-#define _all_match_comp(A, B, FOREACH, F) _all_comp_part(A, FOREACH, F(*_iter_all, B),      _expected = B;)
+#define _all_comp_shared(A, B, C, T, EXPR, EXPECTED) csBool _tmp = _test; long long _index = 0; void* _pvalue = NULL; T _expected; T* C##_foreach_index(_iter_all, _loop_all, A) { _test = EXPR; if (!_test) { _index = _loop_all; _pvalue = _iter_all; EXPECTED break; } } _test ^= _tmp
+#define _all_comp(A, B, C, T, M)        _all_comp_shared(A, B, C, T, M(*_iter_all),         /* blank */       )
+#define _all_comp_be(A, B, C, T, x)     _all_comp_shared(A, B, C, T, ((*_iter_all) x (B)),  _expected = (B);  )
+#define _all_comp_match(A, B, C, T, F)  _all_comp_shared(A, B, C, T, F(*_iter_all, (B)),    _expected = (B);  )
 
-#define _all_setup(T) FALSE; csBool _tmp = _test; long long _index = 0; void* _pvalue = NULL; T _expected;
-//#define _all(M, T_el, T_con, ...)                   _all_setup(T_el)  FALSE;  T_el* T_con##_foreach_index, 0, M, T_el, _all_comp
-#define _all(M, T_CON, T_EL, T_RES,...)   "MATCHER: " M , "T_CON: " T_CON , "TYPE:" _all_tsel_##T_RES(T_EL, T_RES),0,0,0,0
-#define _all_be(x, B, T_el, T_con)                  _all_setup(T_el)  TRUE;   T_el* T_con##_foreach_index, B, x, T_el, _all_be_comp
-#define _all_match(F, B, T_el, T_con, ...)          _all_setup(T_el)  TRUE;   T_el* T_con##_foreach_index, B, F, T_el, _all_match_comp
-//#define _all_match2(F, B, T_el, T_arg, T_con, ...)  _all_setup(T_arg) TRUE;   T_el* T_con##_foreach_index, B, F, T_el, _all_match_comp
+#define _all(M, T_CON, T_EL, T_SEL)             FALSE; csBool _print_expected_value = FALSE;  _all_comp,       M,  ><, T_EL, _cspec_type_##T_SEL,  T_CON
+#define _all_be(x, B, T_CON, T_EL, T_SEL)       FALSE; csBool _print_expected_value = TRUE;   _all_comp_be,    x,  B,  T_EL, _cspec_type_##T_SEL,  T_CON
+#define _all_match(B, FN, T_CON, T_EL, T_SEL)   FALSE; csBool _print_expected_value = TRUE;   _all_comp_match, FN, B,  T_EL, T_SEL,                T_CON
 
-//#define _all_va(matcher, B, T_el, T_argcon, T_con, F, ...) F(matcher, B, T_el, T_argcon, T_con)
-//#define _all_va(...) _all(__VA_ARGS__, c_array, _cspec_type_default, _cspec_type_default)
-#define _cspec_type_sel(T, A, C) T
+#define _all_select(M, T_CON, T_EL,_0,_1, T_SEL, ...)                         _all(M, T_CON, T_EL, T_SEL)
+#define _all_be_select(x, B, T_CON, T_EL,_0,_1,T_SEL, ...)                    _all_be(x, B, T_CON, T_EL, T_SEL)
+#define _all_match_select(B, T_CON, T_EL, FN,_a,_c,_e, P2,_m,_n,_o, P3, ...)  _all_match(B, _pick_##P2(FN, _a, _c, 0), T_CON, T_EL, _pick_##P3(_cspec_type_def, _cspec_type_def, _cspec_type_sel, _cspec_type_sel))
 
-#if CSPEC_USE_DEDUCTION > 1
-# define _cspec_type_def(T, A, C) typeof((0, (C##_first(A))))
-#else
-# define _cspec_type_def(T, A, C) int
-#endif
-
-#define _all_comp2(A, B, C, T, M)       csBool _tmp = _test; long long _index = 0; void* _pvalue = NULL; T _expected; T* C##_foreach_index(_iter_all, _loop_all, A) { _test = M(*_iter_all); if (!_test) { _index = _loop_all; _pvalue = _iter_all; /*EXPECTED*/ break; } } _test ^= _tmp
-#define _all2(M, T_CON, T_EL,_0,_1, T_SEL, ...)             FALSE; csBool _print_expected_value = FALSE; _all_comp2, M, ><, T_EL, _cspec_type_##T_SEL, T_CON
-#define _all_va(...) _all2(__VA_ARGS__, c_array, ><, sel, def, def)
-
-#define _all_match_comp2(A, B, C, T, F) csBool _tmp = _test; long long _index = 0; void* _pvalue = NULL; T _expected; T* C##_foreach_index(_iter_all, _loop_all, A) { _test = F(*_iter_all, (B)); if (!_test) { _index = _loop_all; _pvalue = _iter_all; _expected = (B); break; } } _test ^= _tmp
-#define _all_match2(B, T_CON, T_EL, M,_0,_1,_2, T_SEL, ...) FALSE; csBool _print_expected_value = TRUE; _all_match_comp2, M, B, T_EL, _cspec_type_##T_SEL, T_CON
-//#define _all_match_va(...) _all_match2(__VA_ARGS__,/* B */ c_array, type, asdf, sel, def, def)
-
-#define _pick_0(a,b,c,d) a
-#define _pick_1(a,b,c,d) b
-#define _pick_2(a,b,c,d) c
-#define _pick_3(a,b,c,d) d
-
-#define _all_match5(B, FN, T_CON, T_EL, T_SEL) FALSE; csBool _print_expected_value = TRUE; _all_match_comp2, FN, B, T_EL, T_SEL, T_CON
-#define _all_match_select(B, T_CON, T_EL, FN,_a,_c,_e, P2,_m,_n,_o, P3, ...) _all_match5(B, _pick_##P2(FN, _a, _c, 0), T_CON, T_EL, _pick_##P3(_cspec_type_def, _cspec_type_def, _cspec_type_sel, _cspec_type_sel))
-#define _all_match_va(...) _all_match_select(__VA_ARGS__/*B*/, c_array, ><, _match_fn, 0, 2, 1, 0, 3, 2, 1, 0)
-
-#define _all_be_comp2(A, B, C, T, x)    csBool _tmp = _test; long long _index = 0; void* _pvalue = NULL; T _expected; T* C##_foreach_index(_iter_all, _loop_all, A) { _test = ((*_iter_all) x (B)); if (!_test) { _index = _loop_all; _pvalue = _iter_all; /*EXPECTED*/ break; } } _test ^= _tmp
-#define _all_be2(x, B, T_CON, T_EL, T_SEL) FALSE; csBool _print_expected_value = TRUE; _all_be_comp2, x, B, T_EL, _cspec_type_##T_SEL, T_CON
-#define _all_be_select(x, B, T_CON, T_EL,_0,_1,T_SEL, ...) _all_be2(x, B, T_CON, T_EL, T_SEL)
-#define _all_be_va(...) _all_be_select(__VA_ARGS__/*op, B*/, c_array, ><, sel, def, def)
-
+#define _all_va(...)        _all_select(      __VA_ARGS__,          c_array, ><, sel, def, def)
+#define _all_be_va(...)     _all_be_select(   __VA_ARGS__/*op, B*/, c_array, ><, sel, def, def)
+#define _all_match_va(...)  _all_match_select(__VA_ARGS__/*B*/,     c_array, ><, _match_fn, 0, 2, 1, 0, 3, 2, 1, 0)
 
 #define _match_no_using(F) ""
 #define _match_using(F) " using "F
@@ -1290,10 +1276,10 @@ void cpyptr(void* dst, const void* src, csSize size);
 #define _be_within_inclusive(A) (A); _test ^= (_C - _B <= _A && _A <= _C + _B)
 
 #define _be_between(B_LO, C_HI, MODE, T) _matcher_setup(B_LO, C_HI, T) _be_between_##MODE
-#define _be_between_select(LO, HI, MODE, T,_a,_c,P3,...) _be_between(LO, HI, MODE, _pick_##P3(T, _a, 0, 0))
+#define _be_between_select(LO, HI, MODE, T,_a,_c,P3,...) _be_between(LO, HI, MODE, _pick_##P3(T, _a, ><, ><))
 
 #define _be_within(B_EXT, C_MID, MODE, T) _matcher_setup(B_EXT, C_MID, T) _be_within_##MODE
-#define _be_within_select(EXT, MID, MODE, T,_a,_c,P3,...) _be_within(EXT, MID, MODE, _pick_##P3(T, _a, 0, 0))
+#define _be_within_select(EXT, MID, MODE, T,_a,_c,P3,...) _be_within(EXT, MID, MODE, _pick_##P3(T, _a, ><, ><))
 
 #if CSPEC_USE_DEDUCTION > 1
 # define _be_within_va(B, ...)  _be_within_select(B, __VA_ARGS__/*C*/, inclusive, typeof(B), 0, 1, 0)

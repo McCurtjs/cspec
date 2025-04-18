@@ -857,17 +857,19 @@ static csBool _cspec_log_param(const char* typ_N, const void* N) {
     return FALSE;
   }
 
+  csBool written = TRUE;
+
   if (resolve_user_types) {
     const char* old_fmt = test.out.fmt;
     test.out.fmt = NULL;
-    csBool written = resolve_user_types(&typ_N, N);
+    written = resolve_user_types(&typ_N, N);
     test.out.fmt = old_fmt;
 
     if (written) {
       _cspec_out_fmt_continue();
     }
 
-    return written != 0;
+    return written;
   }
 
   csBool is_size_t = cspec_streq(typ_N, "size_t")
@@ -986,19 +988,22 @@ static csBool _cspec_log_param(const char* typ_N, const void* N) {
   }
   else {
     cspec_out_str("<unknown_type>");
-    cspec_out_fmt_end();
-    return FALSE;
+    written = FALSE;
   }
 
   if (param.show_types) {
     cspec_out_str(" [ ");
-    cspec_out_str(typ_N);
+    if (typ_N) {
+      cspec_out_str(typ_N);
+    } else {
+      cspec_out_str("<NULL>");
+    }
     cspec_out_str(" ]");
   }
 
   cspec_out_fmt_end();
 
-  return TRUE;
+  return written;
 }
 
 void _cspec_log_fmt_exp(

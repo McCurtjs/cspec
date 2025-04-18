@@ -711,7 +711,8 @@ describe(container_matchers) {
         expect(X to not match(Y));
         expect(X to be_within(2 of 8));
 
-        //expect(fn to not match(7) given(2, 2));
+        //expect(fn to not match(7) given(2, 2)); // match call and params
+        //expect(fn to not match(7) given(2, 2), int); // add function return type
         expect(fn to be_between(1, 6) given(2, 3));
         expect(fn to equal(4) given(3, 1));
         // TODO: fix type deduction for type printing in arrays
