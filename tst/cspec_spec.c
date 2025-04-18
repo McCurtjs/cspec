@@ -682,6 +682,8 @@ describe(function_matchers) {
 
 }
 
+int fn(int x, int y) { return x + y; }
+
 describe(container_matchers) {
 
   context("compositions on an int array [3, 5, 7]") {
@@ -697,7 +699,8 @@ describe(container_matchers) {
         expect(arr to all(be_positive, c_array)); // type deduction, explicit container type
         expect(arr to all(be_positive, c_array of int)); // explicit container and type
 
-        expect(arr to all(be_within(2 of 5)));
+        expect(arr to all(not be_within(2 of 15)));
+        expect(arr to not all(be_between(1, 7, exclusive_end)));
 
         expect(arr to all_be( < , 10));
         expect(arr to all_be( < , 10, c_array));
@@ -705,12 +708,23 @@ describe(container_matchers) {
 
         int X = 10, Y = 9;
 
-        expect(X to match(Y));
+        expect(X to not match(Y));
+        expect(X to be_within(2 of 8));
+
+        //expect(fn to not match(7) given(2, 2));
+        expect(fn to be_between(1, 6) given(2, 3));
+        expect(fn to equal(4) given(3, 1));
+        // TODO: fix type deduction for type printing in arrays
+        // TODO: add all_not_match mini-matcher? (should be the same as "all_match(not fn)"?)
 
         expect(arr to all_match(X)); // type deduction, auto c_array
         expect(arr to all_match(X, c_array)); // type deduction, explicit container type
-        expect(arr to all_match(X, c_array, int)); // explicit container and type
-        expect(arr to all_match(X, c_array, int, fn)); // explicit container and type
+        expect(arr to not all_match(X, c_array of int)); // explicit container and type
+        expect(arr to all_match(X, c_array of long, fn)); // explicit container and type
+
+        expect(arr[0] to be_between(2, 6));
+        expect(arr[0] to be_between(2, 6, inclusive));
+        expect(arr[0] to be_between(2, 6, inclusive, int));
       }
 
       context("a negative number is added to the array [..., -1]") {
@@ -726,48 +740,48 @@ describe(container_matchers) {
       }
 
       it("contains values that are not all within 2 of 6") {
-        expect(arr to not all(be_within(2 of 6), int, c_array));
+        expect(arr to not all(be_within(2 of 6), c_array, int));
       }
 
       it("contains all values which are not within 2 of 10") {
-        expect(arr to all(not be_within(2 of 10), int, c_array));
+        expect(arr to all(not be_within(2 of 10), c_array, int));
       }
 
       it("contains at least one value within 2 of 8") {
-        expect(arr to not all(not be_within(2 of 8), int, c_array));
+        expect(arr to not all(not be_within(2 of 8), c_array, int));
       }
-
-#define be_less_than(A, B) (A < B)
+      /*
+#define be_less_than(A) (A < 5)
       it("does a piecewise composition against another array") {
         int exp[] = { 6, 10, 14 };
-        expect(arr to all(be_less_than, exp[n], int, c_array));
+        expect(arr to all(be_less_than, c_array, int));
       }
 
       it("does a piecewise comparison using the function matcher shorthand (macro)") {
         int exp[] = { 6, 10, 14 };
-        expect(arr to all_match(exp[n], be_less_than, int, c_array));
+        expect(arr to all_match(exp[n], be_less_than, c_array, int));
       }
-
+      */
       it("compares the values using the 'be' matcher") {
-        expect(arr to all_be( < , 10, int, c_array));
+        expect(arr to all_be( < , 10, c_array, int));
       }
 
       it("contains values not all equal to 3") {
-        expect(arr to not all_be( == , 3, int, c_array));
+        expect(arr to not all_be( == , 3, c_array, int));
       }
 
       it("contains values all not equal to 4") {
-        expect(arr to all_be( != , 4, int, c_array));
+        expect(arr to all_be( != , 4, c_array, int));
       }
 
       it("contains only non-even values") {
-        expect(arr to all_be( % 2 != , 0, int, c_array));
-        expect(arr to all(be_odd, int, c_array));
+        expect(arr to all_be( % 2 != , 0, c_array, int));
+        expect(arr to all(be_odd, c_array, int));
       }
 
       it("does a piecewise comparison with an array 2 larger") {
         int exp[] = { 5, 7, 9 };
-        expect(arr to all_be( +2 == , exp[n], int, c_array));
+        expect(arr to all_be( +2 == , exp[n], c_array, int));
       }
 
     }
@@ -780,54 +794,49 @@ describe(container_matchers) {
         int arr2[] = { 3, 5, 7, -1 };
 
         it("contains only positive values") {
-          expect(arr2 to all(be_positive, int, c_array));
+          expect(arr2 to all(be_positive, c_array, int));
         }
 
         it("wants ONLY values that are not positive") {
-          expect(arr to all(not be_positive, int, c_array));
+          expect(arr to all(not be_positive, c_array, int));
         }
       }
 
       it("wants values only within 2 of 4") {
-        expect(arr to all(be_within(2 of 4), int, c_array));
+        expect(arr to all(be_within(2 of 4), c_array, int));
       }
 
       it("wants values that are not all within 2 of 5") {
-        expect(arr to not all(be_within(2 of 5), int, c_array));
+        expect(arr to not all(be_within(2 of 5), c_array, int));
       }
 
       it("wants only values which are not within 2 of 9") {
-        expect(arr to all(not be_within(2 of 9), int, c_array));
+        expect(arr to all(not be_within(2 of 9), c_array, int));
       }
 
       it("wants at least one value within 2 of 10") {
-        expect(arr to not all(not be_within(2 of 10), int, c_array));
-      }
-
-      it("does a piecewise composition against another array") {
-        int exp[] = { 6, 10, 6 };
-        expect(arr to all(be_less_than, exp[n], int, c_array));
+        expect(arr to not all(not be_within(2 of 10), c_array, int));
       }
 
       it("checks that all numbers are over 12") {
-        expect(arr to all_be( > , 12, int, c_array));
+        expect(arr to all_be( > , 12, c_array, int));
       }
 
       it("asks for not all numbers to be less than 10") {
-        expect(arr to not all_be( < , 10, int, c_array));
+        expect(arr to not all_be( < , 10, c_array, int));
       }
 
       it("contains at least one value equal to 4") {
-        expect(arr to not all_be( != , 4, int, c_array));
+        expect(arr to not all_be( != , 4, c_array, int));
       }
 
       it("wants at least one even value") {
-        expect(arr to not all_be( % 2 != , 0, int, c_array));
+        expect(arr to not all_be( % 2 != , 0, c_array, int));
       }
 
       it("does a piecewise comparison with an array 2 larger") {
         int exp[] = { 5, 7, 8 };
-        expect(arr to all_be( +2 == , exp[n], int, c_array));
+        expect(arr to all_be( +2 == , exp[n], c_array, int));
       }
 
     }
@@ -842,7 +851,7 @@ describe(container_matchers) {
 
       it("uses a function matcher with a function") {
         char* words[] = { "ab", "asdf", "qwerty" };
-        expect(words to all_match(arr[n], cspec_streq, char*, c_array));
+        expect(words to all_match(arr[n], c_array of char*, cspec_streq));
       }
 
     }

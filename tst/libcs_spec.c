@@ -57,7 +57,7 @@ describe(cspec_memset) {
 
     cspec_memset(bytes, 'x', 20);
 
-    expect(bytes to all_be( == , 'x', char, c_array));
+    expect(bytes to all_be( == , 'x', c_array, char));
   }
 }
 
@@ -111,7 +111,7 @@ describe(cspec_memcpy) {
     int test[] = { 1, 2, 3, 4, 5 };
     cspec_memcpy(dst, test, sizeof(test));
 
-    expect(test to all_be( == , dst[n], int, c_array));
+    expect(test to all_be( == , dst[n], c_array, int));
   }
 
   it("can copy a struct") {
@@ -164,13 +164,13 @@ describe(cspec_memrev) {
     it("reverses a memory range of larger objects") {
       int expected[] = { 4, 3, 2, 1 };
       cspec_memrev(buffer, sizeof(int), ARRAY_COUNT(buffer));
-      expect(buffer to all_be( == , expected[n], int, c_array));
+      expect(buffer to all_be( == , expected[n], c_array, int));
     }
 
     it("can operate on a sub-range") {
       int expected[] = { 1, 3, 2, 4 };
       cspec_memrev(buffer + 1, sizeof(int), ARRAY_COUNT(buffer) - 2);
-      expect(buffer to all_be( == , expected[n], int, c_array));
+      expect(buffer to all_be( == , expected[n], c_array, int));
     }
 
   }
