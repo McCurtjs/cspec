@@ -300,6 +300,13 @@ csSize cspec_strlen(const char* s) {
   return ret;
 }
 
+csSize cspec_strnlen(const char* s, csSize n) {
+  csSize ret = 0;
+  if (!s) return 0;
+  while (n-- && *(s++)) ++ret;
+  return ret;
+}
+
 csBool cspec_streq(const char* A, const char* B) {
   if (A == B) return TRUE;
   if (!A || !B) return FALSE;
@@ -324,7 +331,7 @@ csBool cspec_strrstr(const char* s, const char* ends_with) {
 
 void cspec_strncpy(char* dst, const char* src, csSize n_dst) {
   if (!dst || !src || n_dst == 0u) return;
-  csSize length = cspec_strlen(src);
+  csSize length = cspec_strnlen(src, n_dst);
   if (length >= n_dst) length = n_dst - 1;
   cspec_memcpy(dst, src, length + 1);
   dst[length] = '\0';
@@ -838,10 +845,6 @@ void _cspec_log(int status, int line, const void* mem, const char* message) {
 
   if (param.padding) cspec_out_print();
 }
-
-/*----------------------------------------------------------------------------*\
-  Printing of typed values
-\*----------------------------------------------------------------------------*/
 
 static csBool _cspec_log_param(const char* typ_N, const void* N) {
 
