@@ -43,7 +43,7 @@ int main(int argc, char* argv[]) {
 #endif
 
 #ifdef CSPEC_MSVC
-  argv = (char*[]){ "BLAH", "-vsf", "cspec_spec.c:687" };
+  argv = (char*[]){ "BLAH", "-vsf", "cspec_spec.c:688" };
   argc = 3;
 #endif
 

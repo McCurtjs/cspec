@@ -683,6 +683,7 @@ describe(function_matchers) {
 }
 
 int fn(int x, int y) { return x + y; }
+csBool cmpint(int x, int y) { return x == y; }
 
 describe(container_matchers) {
 
@@ -707,12 +708,20 @@ describe(container_matchers) {
         expect(arr to all_be( < , 10, c_array of int));
 
         int X = 10, Y = 9;
+        int FIV = 5, TWO = 2, THR = 3;
+        (void)TWO; (void)THR;
 
         expect(X to not match(Y));
         expect(X to be_within(2 of 8));
 
-        //expect(fn to not match(7) given(2, 2)); // match call and params
-        //expect(fn to not match(7) given(2, 2), int); // add function return type
+
+        expect(fn to match(FIV) given(TWO, THR));
+        expect(fn to match(Y) given(2, 4), int);
+        expect(fn to match(Y, cmpint) given(2, 4), int);
+        expect(fn to not match(7) given(2, 2)); // match call and params
+        expect(fn to not match(7) given(2, 2), int); // add function return type
+
+
         expect(fn to be_between(1, 6) given(2, 3));
         expect(fn to equal(4) given(3, 1));
         // TODO: fix type deduction for type printing in arrays
