@@ -236,6 +236,10 @@ csBool cspec_isdigit(int c) {
   return '0' <= c && c <= '9';
 }
 
+csBool cspec_ishex(int c) {
+  return cspec_isdigit(c) || ('A' <= c && c <= 'F');
+}
+
 csBool cspec_isprint(int c) {
   return c > 0x1F && c < 0x7F;
 }
@@ -346,11 +350,25 @@ int cspec_atoi(const char* s) {
     if (cspec_isdigit(*s)) break;
     ++s;
   }
-  while (*s && cspec_isdigit(*s)) {
+  while (cspec_isdigit(*s)) {
     result *= 10;
     result += *(s++) - '0';
   }
   return result * sign;
+}
+
+csSize cspec_htoi(const char* s) {
+  if (!s) return 0;
+  csSize result = 0;
+  while (cspec_ishex(*s)) {
+    result *= 16;
+    if (cspec_isdigit(*s)) {
+      result += *(s++) - '0';
+    } else {
+      result += 10 + (*(s++) - 'A');
+    }
+  }
+  return result;
 }
 #endif
 
@@ -396,6 +414,8 @@ static void _cspec_out_ch(char ch) {
   }
 
   if (ch == '\n') {
+    /* not using out_pad here because this needs to track from the last */
+    /*    newline, where _pad checks from the beginning of the string   */
     for (csUint i = 0; i < test.out.tabstop; ++i) {
       _cspec_out_ch(' ');
     }
@@ -460,7 +480,18 @@ static void _cspec_out_fmt_continue(void) {
   test.out.fmt = next_fmt;
 }
 
+static void _cspec_out_fmt_flush() {
+  test.out.fmt_lock = 0;
+  const char* old_fmt = test.out.fmt;
+  test.out.fmt = NULL;
+  if (old_fmt) {
+    cspec_out_str("{}");
+    cspec_out_str(old_fmt);
+  }
+}
+
 const char* cspec_out_read(void) {
+  _cspec_out_fmt_flush();
   test.out.buffer[test.out.index] = '\0';
   return test.out.buffer;
 }
@@ -477,9 +508,9 @@ void cspec_out_fmt_end(void) {
 }
 
 void cspec_out_clear(void) {
+  test.out.fmt_lock = 0;
   test.out.index = 0;
   test.out.fmt = NULL;
-  test.out.fmt_lock = 0;
   test.out.buffer[0] = '\0';
 }
 
@@ -510,11 +541,11 @@ void cspec_out_byte(char c) {
 
 void cspec_out_hex(char c) {
   unsigned char h = ((unsigned char)c) % 16;
-  h += h >= 10 ? 'A'-10 : '0';
-  _cspec_out_ch(h);
+  char lsb = h + (h >= 10 ? 'A'-10 : '0');
   h = ((unsigned char)c) / 16;
-  h += h >= 10 ? 'A'-10 : '0';
-  _cspec_out_ch(h);
+  char msb = h + (h >= 10 ? 'A'-10 : '0');
+  _cspec_out_ch(msb);
+  _cspec_out_ch(lsb);
   _cspec_out_fmt_continue();
 }
 
@@ -593,9 +624,7 @@ void cspec_out_float(double f) {
 
 static void _cspec_out_print(ConsoleColor color) {
   /* flush any remaining format string */
-  test.out.fmt_lock = 0;
-  cspec_out_str(test.out.fmt);
-  test.out.fmt = NULL;
+  _cspec_out_fmt_flush();
 
 #ifdef __WASM__
   test.out.buffer[test.out.index] = '\0';
@@ -682,13 +711,15 @@ static MemoryRecord* _cspec_mem_rec_from_ptr(const void* ptr);
 static void _cspec_log_headers(
   int desc_color, PrintLevel desc_level, const char* to_append
 ) {
-  if (!test.printed_filename) {
+  csBool visible = param.verbose >= V_NOTES || desc_color != CONCOL_bWhite;
+
+  if (visible && !test.printed_filename) {
     cspec_out_str(test.suite->header);
     _cspec_out_print(CONCOL_Purple);
     test.printed_filename = TRUE;
   }
 
-  if (!test.printed_function) {
+  if (visible && !test.printed_function) {
     cspec_out_pad(param.tabsize, ' ');
     cspec_out_fmt("in function ({}):%c test_{}");
     cspec_out_int(*test.function->line);
@@ -701,7 +732,7 @@ static void _cspec_log_headers(
   int indent = 2;
   for (int i = 1; i <= test.ctx.top; ++i) {
     ctx = &test.ctx.stack[i];
-    if (!ctx->printed) {
+    if (visible && !ctx->printed) {
       cspec_out_pad(param.tabsize * indent, ' ');
       cspec_out_str(ctx->desc);
       _cspec_out_print(CONCOL_Cyan);
@@ -710,7 +741,7 @@ static void _cspec_log_headers(
     ++indent;
   }
 
-  if (test.printed_description < desc_level) {
+  if (visible && test.printed_description < desc_level) {
     cspec_out_pad(param.tabsize * indent, ' ');
 
     if (!test.in_progress) {
@@ -1880,6 +1911,7 @@ static void _cspec_before_group(const TestGroup* t) {
 static void _cspec_before_pass(void) {
   _cspec_mem_reset(!param.skip_memory_test);
   cspec_memset(&test.pass, 0, sizeof(test.pass));
+  cspec_out_clear();
   test.ctx.index = 0;
   test.out.tabstop = 0;
 }

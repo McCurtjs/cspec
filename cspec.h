@@ -138,7 +138,7 @@ typedef struct TestSuite {
 #endif
 
 #ifndef cspec_out_float_precision
-# define cspec_out_float_precision 10
+# define cspec_out_float_precision 100
 #endif
 
 /*----------------------------------------------------------------------------*\
@@ -900,6 +900,7 @@ void cspec_set_line(int line);
 */
 
 csBool  cspec_isdigit(int c);
+csBool  cspec_ishex(int c);
 csBool  cspec_isprint(int c);
 csBool  cspec_memeq(const void* a, const void* b, csSize sizeA, csSize sizeB);
 int     cspec_memcmp(const void* a, const void* b, csSize n);
@@ -911,26 +912,27 @@ csBool  cspec_streq(const char* A, const char* B);
 csBool  cspec_strrstr(const char* s, const char* ends_with);
 void    cspec_strncpy(char* dst, const char* src, csSize n_dst);
 int     cspec_atoi(const char* s);
+csSize  cspec_htoi(const char* s);
 
 /*
 * \brief CSpec output functions
 */
 
 const char* cspec_out_read(void);
+void cspec_out_clear(void);
+void cspec_out_pad(csUint until_pos, char c);
+void cspec_out_ch(char ch);
+void cspec_out_str(const char* s);
+void cspec_out_bool(csBool b);
+void cspec_out_byte(char c);
+void cspec_out_hex(char c);
+void cspec_out_uint(unsigned long long int i);
+void cspec_out_int(long long int);
+void cspec_out_float(double f);
+void cspec_out_ptr(const void* ptr);
+void cspec_out_fmt(const char* fmt);
 void cspec_out_fmt_begin(void);
 void cspec_out_fmt_end(void);
-void cspec_out_clear(void);
-void cspec_out_fmt(const char* fmt);
-void cspec_out_str(const char* s);
-void cspec_out_ch(char ch);
-void cspec_out_byte(char c);
-void cspec_out_int(long long int);
-void cspec_out_uint(unsigned long long int i);
-void cspec_out_hex(char c);
-void cspec_out_ptr(const void* ptr);
-void cspec_out_bool(csBool b);
-void cspec_out_pad(csUint until_pos, char c);
-void cspec_out_float(double f);
 void cspec_out_print(void);
 
 void cspec_log_start(void);
@@ -1201,7 +1203,6 @@ void cpyptr(void* dst, const void* src, csSize size);
 
 
 #if CSPEC_USE_DEDUCTION > 1
-//# define _expect_fn_mtyp(...)
 # define _expect_fn_mtyp(S, F, n, M, B, u, _, P, T, ...)    T        _R = (F P);      T        _B    = (B);     _param_fn_def P       if (!(M(_R, _B)) ^ n) _cspec_fail_fn_match(F, M, B, P, u, n)
 # define _expect_fn_mtch(S, F, n, M, B, u, _, P, ...)       AUTO_DUP(_R , (F P));     AUTO_DUP(_B    , (B));    _param_fn_def P       if (!(M(_R, _B)) ^ n) _cspec_fail_fn_match(F, M, B, P, u, n)
 # define _expect_fn_expr(S, F, x, B, P, ...)                AUTO_DUP(_R , (F P));     AUTO_DUP(_B    , (B));    _param_fn_def P       if (!(_R x _B))       _cspec_fail_fn_expr(F, x, B, P)
