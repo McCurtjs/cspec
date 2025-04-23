@@ -94,6 +94,7 @@ sources_test="
   cspec.c
   tst/libcs_spec.c
   tst/out_spec.c
+  tst/mem_spec.c
   tst/cspec_spec.c
   tst/test_main.c
 "
@@ -104,7 +105,7 @@ sources_test="
 if [ "$build_target" = "wasm" ] || [ "$build_target" = "clang" ]; then
 
   flags_common="
-    -Wall -Wextra -Wno-missing-braces
+    -Wall -Wextra -pedantic -Wno-missing-braces
     -I ./
   "
 

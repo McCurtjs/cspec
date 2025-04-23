@@ -33,6 +33,7 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
   ./tst/test_main.c
   ./tst/libcs_spec.c
   ./tst/out_spec.c
+  ./tst/mem_spec.c
   ./tst/cspec_spec.c
   )
 

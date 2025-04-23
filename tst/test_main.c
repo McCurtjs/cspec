@@ -28,6 +28,7 @@
 
 extern TestSuite tests_libcs;
 extern TestSuite tests_cspec_out;
+extern TestSuite tests_cspec_mem;
 extern TestSuite tests_cspec;
 
 // Main
@@ -43,13 +44,14 @@ int main(int argc, char* argv[]) {
 #endif
 
 #ifdef CSPEC_MSVC
-  argv = (char*[]){ "BLAH", "-vsfp", "out_spec.c" };
+  argv = (char*[]){ "BLAH", "-vspf", "mem_spec.c" };
   argc = 3;
 #endif
 
   TestSuite* test_suites[] = {
     &tests_libcs,
     &tests_cspec_out,
+    &tests_cspec_mem,
     &tests_cspec
   };
 

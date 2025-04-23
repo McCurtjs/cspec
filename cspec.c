@@ -393,9 +393,11 @@ void cpyptr(void* dst, const void* ptr, csSize size) {
   cspec_memcpy(dst, &ptr, size);
 }
 
-csBool _cspec_streq(const char*const * A, const char*const * B, csSize _0, csSize _1) {
-  (void)_0;
-  (void)_1;
+csBool _cspec_streq(
+  const char* const * A, const char* const * B, csSize unused0, csSize unused1
+) {
+  (void)unused0;
+  (void)unused1;
   return cspec_streq(*A, *B);
 }
 
@@ -1223,9 +1225,9 @@ void* cspec_malloc(csSize size) {
   /* bbbbbbbXXXXXXXXXXXXXXXXeeeeeee*/
   csSize next = test.mem.ptr + memory_size_fence*2 + size;
 
-  if (next > memory_size_full + memory_size_barrier) {
+  if (next >= memory_size_full - memory_size_barrier) {
     test.pass.expect_memory_error = FALSE;
-    _cspec_log(S_MEMFAIL, 0, NULL,
+    _cspec_log(S_FAILURE, 0, NULL,
       "malloc: ran out of test memory space! Increase limit from "
       STR(cspec_max_memory_pool_size)" bytes."
     );
@@ -1235,7 +1237,7 @@ void* cspec_malloc(csSize size) {
 
   if (test.pass.count_mallocs >= cspec_max_memory_allocs) {
     test.pass.expect_memory_error = FALSE;
-    _cspec_log(S_MEMFAIL, 0, NULL,
+    _cspec_log(S_FAILURE, 0, NULL,
       "malloc: ran out of test memory allocations! Increase limit from "
       STR(cspec_max_memory_allocs)" allocations."
     );
