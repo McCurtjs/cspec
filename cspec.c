@@ -1208,7 +1208,7 @@ void* cspec_malloc(csSize size) {
   /* Zero-size malloc or realloc is implementation dependent */
   if (size == 0) {
     _cspec_log(S_MEMFAIL, 0, NULL,
-      "malloc: calling malloc with a zero size is undefined"
+      "malloc: calling malloc with a zero size is undefined behavior"
     );
     return NULL;
   }
@@ -1340,6 +1340,12 @@ void* cspec_realloc(void* mem_, csSize nsize) {
     return cspec_malloc(nsize);
   }
 
+  if (nsize == 0) {
+    _cspec_log(S_MEMFAIL, 0, NULL,
+      "realloc: calling realloc with a zero size is undefined behavior"
+    );
+  }
+
   MemoryRecord* record = _cspec_mem_rec_from_ptr(mem);
 
   /* Memory block has no valid matches (bad pointer) */
@@ -1371,13 +1377,22 @@ void* cspec_realloc(void* mem_, csSize nsize) {
     if (nsize < record->size) {
       csSize diff = record->size - nsize;
       cspec_memset(record->ptr + nsize, 'e', memory_size_fence);
-      cspec_memset(record->ptr + record->size + memory_size_fence, 'F', diff);
+      cspec_memset(record->ptr + nsize + memory_size_fence, 'F', diff);
       if (last_record) {
         test.mem.ptr -= diff;
       }
       record->size = nsize;
       return mem;
     }
+  }
+
+  /* Realloc can also fail to increase the size, check for force fails */
+  if (test.pass.force_malloc_null >= M_ONCE) {
+    if (test.pass.force_malloc_null == M_ONCE) {
+      test.pass.force_malloc_null = M_HAPPENED;
+    }
+    ++test.pass.count_expected_malloc_fails;
+    return NULL;
   }
 
   /* Only the most recent block can be embiggened, if not it, allocate here */
@@ -1400,15 +1415,6 @@ void* cspec_realloc(void* mem_, csSize nsize) {
   }
 
   /* At this point the record is the last one and needs to be grown */
-
-  /* Realloc can also fail to increase the size, check for force fails */
-  if (test.pass.force_malloc_null >= M_ONCE) {
-    if (test.pass.force_malloc_null == M_ONCE) {
-      test.pass.force_malloc_null = M_HAPPENED;
-    }
-    ++test.pass.count_expected_malloc_fails;
-    return NULL;
-  }
 
   /* Calculate the next ptr value */
   csSize next = test.mem.ptr + (nsize - record->size);
