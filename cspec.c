@@ -1160,6 +1160,8 @@ static void _cspec_mem_check_final(void) {
       _cspec_log(S_MEMFAIL, 0, record, "after: detected buffer over/underrun");
     }
 
+    /* TODO: check memory between allocations for realloc-shrinks */
+
     /* Ensure memory hasn't been modified after free */
     if (record->is_free) {
       for (csSize j = 0; j < record->size; ++j) {
@@ -1365,7 +1367,7 @@ void* cspec_realloc(void* mem_, csSize nsize) {
 
   csBool last_record = record == &test.mem.records[test.pass.count_mallocs - 1];
 
-  /* If always-move is enabled, skip shrink operations */
+  /* If force-move is enabled, skip shrink operations */
   if (test.pass.force_realloc_move < M_ONCE) {
 
     /* Same size, do nothing */
@@ -1396,7 +1398,7 @@ void* cspec_realloc(void* mem_, csSize nsize) {
   }
 
   /* Only the most recent block can be embiggened, if not it, allocate here */
-  /* Also perform the move if the caller enabled always-move option */
+  /* Also perform the move if the caller enabled always-move option         */
   if (!last_record || test.pass.force_realloc_move >= M_ONCE) {
     void* ret = cspec_malloc(nsize);
 

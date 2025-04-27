@@ -303,10 +303,10 @@ describe(cspec_malloc_errors) {
   }
 
   it("ensures parity between malloc and free") {
-    int* i = cspec_malloc(sizeof(int) * 3);
-    i[0] = 1819043144;
-    i[1] = 1752440943;
-    i[2] = 560296549;
+    char data[] = "This allocates a string without deleting.";
+    //int data[] = { 1819043144, 1752440943, 560296549 };
+    int* subject = cspec_malloc(sizeof(data));
+    cspec_memcpy(subject, data, sizeof(data));
   }
 
   it("checks that the fence for the previous allocation isn't broken") {
@@ -363,7 +363,7 @@ describe(cspec_free_errors) {
       *(subject - 1) = '!';
     }
 
-    after{
+    after {
       cspec_free(subject);
     }
 
@@ -373,7 +373,55 @@ describe(cspec_free_errors) {
 
 describe(cspec_realloc_errors) {
 
-  it("is not yet implemented");
+  expect(memory_errors);
+
+  it("gives a warning when passing non-null on the first allocation") {
+    void* fake = NULL;
+    int* mem = cspec_realloc(fake, sizeof(int));
+    cspec_free(mem);
+  }
+
+  it("calls out undefined behavior when invoking with zero size") {
+    int* mem = cspec_realloc(NULL, 0);
+    cspec_free(mem);
+  }
+
+  context("with previously allocated memory") {
+
+    int* subject = cspec_malloc(sizeof(int) * 5);
+    expect(subject to not be_null);
+
+    it("warns about trying to reallocate memory out-of-bounds") {
+      expect(cspec_realloc to be_null given((void*)1, sizeof(int)));
+    }
+
+    it("warns about reallocating in-bounds memory not created by malloc") {
+      expect(cspec_realloc to be_null given(subject + 1, sizeof(int)));
+    }
+
+    it("validates the fence for the block being reallocated (underrun)") {
+      subject[-1] = 0x7065654a;
+      subject[0]  = 0x21737265;
+      expect(cspec_realloc to be_null given(subject, sizeof(int)));
+    }
+
+    it("validates the fence for the block being reallocated (overrun)") {
+      subject[4] = 0x7065654a;
+      subject[5] = 0x21737265;
+      expect(cspec_realloc to be_null given(subject, sizeof(int)));
+    }
+
+    it("fails if there's not enough space to grow the allocation") {
+      /* TODO: figure out the math on this - why does it not fail at max or up to +50? */
+      /*       answer: because 64 - 14 is 50 */
+      expect(cspec_realloc to be_null given(subject, cspec_max_memory_pool_size + 51));
+    }
+
+    after {
+      cspec_free(subject);
+    }
+
+  }
 
 }
 
@@ -404,6 +452,23 @@ describe(cspec_malloc_test_errors) {
 
   it("fails the test when memory errors are expected but don't happen") {
     expect(memory_errors);
+  }
+
+  it("fails the test when malloc is asked to fail but is never called") {
+    expect(malloc_to_fail);
+  }
+
+  /* TODO: "expect malloc to fail" should cause a test failure if it's not called, */
+  /* but "expect malloc to always fail" should not */
+  it("fails the test when malloc is asked to always fail but is never called") {
+    expect(malloc_to_always_fail);
+  }
+
+  /* TODO: Should asking it to always move/fail cause the test to fail if it's */
+  /* not called? What if someone wants it to always do that when relevant?     */
+  it("fails the test when realloc is instructed to move, but is never called") {
+    expect(realloc_to_move);
+    expect(realloc_to_always_move);
   }
 
 }
