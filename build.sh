@@ -30,7 +30,7 @@ while [ "$read_args" == true ] && [ "$1" != "" ]; do
       ;;
     -c | --standard)
       if [ "$2" == "all" ]; then
-        build_vers="23 11 99"
+        build_vers="23 11 99 "
       else
         build_vers+="$2 "
       fi
@@ -92,11 +92,14 @@ esac
 
 sources_test="
   cspec.c
+  tst/test_main.c
   tst/libcs_spec.c
   tst/out_spec.c
+  tst/log_spec.c
   tst/mem_spec.c
   tst/cspec_spec.c
-  tst/test_main.c
+  tst/matcher_spec.c
+  tst/container_spec.c
 "
 
 # Run build based on target type
@@ -105,7 +108,7 @@ sources_test="
 if [ "$build_target" = "wasm" ] || [ "$build_target" = "clang" ]; then
 
   flags_common="
-    -Wall -Wextra -pedantic -Wno-missing-braces
+    -Wall -Wextra -pedantic -Wno-gnu-zero-variadic-macro-arguments
     -I ./
   "
 
@@ -156,6 +159,8 @@ elif [ "$build_target" = "gcc" ]; then
   gcc_params="-I ./"
   success="0"
 
+  echo "$build_vers"
+
   if [[ "$build_vers" =~ "23" ]]; then
     gcc -std=c2x -o build/gcc/test.exe $sources_test $gcc_params
     success="$?"
@@ -172,6 +177,16 @@ elif [ "$build_target" = "gcc" ]; then
     if [ "$success" == "0" ]; then
       echo "C11"
       ./build/gcc/test11.exe $args
+      success="$?"
+    fi
+  fi
+
+  if [[ "$success" == "0" && "$build_vers" =~ "99" ]]; then
+    gcc -std=c99 -o build/gcc/test99.exe $sources_test $gcc_params
+    success="$?"
+    if [ "$success" == "0" ]; then
+      echo "C11"
+      ./build/gcc/test99.exe $args
       success="$?"
     fi
   fi

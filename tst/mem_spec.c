@@ -54,6 +54,11 @@ describe(cspec_malloc_and_free) {
 
     cspec_memset(buffer, '!', size);
 
+    // TODO: This all check fails in C11 on GCC for some reason
+    cspec_log_start();
+    cspec_out_fmt("Blah: {}");
+    cspec_out_int(buffer[0]);
+    cspec_out_print();
     expect(c_array(buffer, 35, char) to all_be( == , '!'));
 
     cspec_free(buffer);
@@ -129,7 +134,7 @@ describe(cspec_realloc) {
 
       it("leaves the memory in place when trying to reallocate with the same size") {
         int* new_mem = cspec_realloc(subject, size);
-        expect(new_mem, == , subject);
+        expect(new_mem, == , subject, void*);
         expect(malloc_count to be_one);
       }
 
@@ -139,18 +144,18 @@ describe(cspec_realloc) {
         int* new_mem = cspec_realloc(subject, sizeof(int));
 
         expect(malloc_count to be_one);
-        expect(new_mem, == , subject);
+        expect(new_mem, == , subject, void*);
         expect(subject[1] to not be_zero);
       }
 
       it("leaves the memory in place when growing the last block") {
         int* new_mem = cspec_realloc(subject, size + sizeof(int));
 
-        expect(new_mem, == , subject);
+        expect(new_mem, == , subject, void*);
         expect(malloc_count to be_one);
 
         expect(c_array(subject, 5, int) to all_match(test_value));
-        expect(subject[5], != , test_value);
+        expect(subject[5], != , test_value, int);
         cspec_memset(&subject[5], '?', sizeof(int));
       }
 
@@ -159,16 +164,16 @@ describe(cspec_realloc) {
 
         int* new_mem = cspec_realloc(subject, size);
 
-        expect(new_mem, != , subject);
+        expect(new_mem, != , subject, int*);
         expect(new_mem to not be_null);
-        expect(malloc_count, == , 2);
+        expect(malloc_count, == , 2, int);
         expect(c_array(new_mem, 5, int) to all_match(test_value));
 
         subject = new_mem;
 
         /* not using "always" means it will ony force-move the first attempt */
         int* second_call = cspec_realloc(subject, size);
-        expect(second_call, == , new_mem);
+        expect(second_call, == , new_mem, void*);
       }
 
       it("can be forced to always move memory for the rest of the test") {
@@ -177,11 +182,11 @@ describe(cspec_realloc) {
         for (int i = 0; i < 3; ++i) {
           int* new_mem = cspec_realloc(subject, size);
           expect(new_mem to not be_null);
-          expect(new_mem, != , subject);
+          expect(new_mem, != , subject, int*);
           subject = new_mem;
         }
 
-        expect(malloc_count, == , 4);
+        expect(malloc_count, == , 4, int);
       }
 
       it("can be forced to fail a grow allocation") {
@@ -206,12 +211,12 @@ describe(cspec_realloc) {
 
       int* newer_allocation = cspec_malloc(sizeof(int));
       expect(newer_allocation to not be_null);
-      expect(malloc_count to equal(2));
+      expect(malloc_count to equal(2), int);
 
       it("still leaves the memory in place when given the same size") {
         int* new_mem = cspec_realloc(subject, size);
-        expect(new_mem, == , subject);
-        expect(malloc_count to equal(2));
+        expect(new_mem, == , subject, void*);
+        expect(malloc_count to equal(2), int);
       }
 
       it("still leaves the memory in place when shrinking the block") {
@@ -219,8 +224,8 @@ describe(cspec_realloc) {
 
         int* new_mem = cspec_realloc(subject, 1);
 
-        expect(malloc_count to equal(2));
-        expect(new_mem, == , subject);
+        expect(malloc_count to equal(2), int);
+        expect(new_mem, == , subject, void*);
         expect(subject[1] to not be_zero);
       }
 
@@ -229,8 +234,8 @@ describe(cspec_realloc) {
 
         int* new_mem = cspec_realloc(subject, size + 1);
 
-        expect(malloc_count to equal(3));
-        expect(new_mem, != , subject);
+        expect(malloc_count to equal(3), int);
+        expect(new_mem, != , subject, void*);
         expect(subject[1] to not be_zero);
         expect(new_mem[1] to be_zero);
 
@@ -260,7 +265,7 @@ describe(cspec_alloc_counters) {
 
   it("counts malloc allocations") {
     for (int i = 0; i < 5; ++i) {
-      expect(malloc_count, == , i);
+      expect(malloc_count, == , i, int);
       buffers[i] = cspec_malloc(sizeof(int));
       expect(free_count to be_zero);
     }
@@ -268,7 +273,7 @@ describe(cspec_alloc_counters) {
 
   it("counts calloc for malloc allocations") {
     for (int i = 0; i < 5; ++i) {
-      expect(malloc_count, == , i);
+      expect(malloc_count, == , i, int);
       buffers[i] = cspec_calloc(1, sizeof(int));
       expect(free_count to be_zero);
     }
@@ -276,7 +281,7 @@ describe(cspec_alloc_counters) {
 
   it("counts realloc(NULL) for malloc allocations") {
     for (int i = 0; i < 5; ++i) {
-      expect(malloc_count, == , i);
+      expect(malloc_count, == , i, int);
       buffers[i] = cspec_realloc(NULL, sizeof(int));
       expect(free_count to be_zero);
     }
@@ -284,11 +289,11 @@ describe(cspec_alloc_counters) {
 
   after {
     for (int i = 0; i < 5; ++i) {
-      expect(free_count, == , i);
+      expect(free_count, == , i, int);
       cspec_free(buffers[i]);
-      expect(malloc_count, == , 5);
+      expect(malloc_count, == , 5, int);
     }
-    expect(free_count, == , 5);
+    expect(free_count, == , 5, int);
   }
 
 }
@@ -304,7 +309,6 @@ describe(cspec_malloc_errors) {
 
   it("ensures parity between malloc and free") {
     char data[] = "This allocates a string without deleting.";
-    //int data[] = { 1819043144, 1752440943, 560296549 };
     int* subject = cspec_malloc(sizeof(data));
     cspec_memcpy(subject, data, sizeof(data));
   }
@@ -376,8 +380,7 @@ describe(cspec_realloc_errors) {
   expect(memory_errors);
 
   it("gives a warning when passing non-null on the first allocation") {
-    void* fake = NULL;
-    int* mem = cspec_realloc(fake, sizeof(int));
+    int* mem = cspec_realloc((void*)1, sizeof(int));
     cspec_free(mem);
   }
 
@@ -411,12 +414,6 @@ describe(cspec_realloc_errors) {
       expect(cspec_realloc to be_null given(subject, sizeof(int)));
     }
 
-    it("fails if there's not enough space to grow the allocation") {
-      /* TODO: figure out the math on this - why does it not fail at max or up to +50? */
-      /*       answer: because 64 - 14 is 50 */
-      expect(cspec_realloc to be_null given(subject, cspec_max_memory_pool_size + 51));
-    }
-
     after {
       cspec_free(subject);
     }
@@ -427,48 +424,54 @@ describe(cspec_realloc_errors) {
 
 describe(cspec_malloc_test_errors) {
 
-  /*
-  * An arena OOM or allocation stack overflow is treated as a regular failure
-  *   rather than a memory error. Normally, this would indicate a test needing
-  *   more space to successfully run, not that the actual logic behind the test
-  *   is wrong. These tests are separate from the malloc memory error tests for
-  *   that reason.
-  */
-  expect(to_fail);
-
-  void* subject = NULL;
-
-  it("will fail to allocate more memory than is present in the test arena") {
-    subject = cspec_malloc(cspec_max_memory_pool_size);
-    expect(subject to be_null);
-  }
-
-  it("will fail to allocate more than "STR(cspec_max_memory_allocs)" times") {
-    for (int i = 0; i < cspec_max_memory_allocs + 1; ++i) {
-      cspec_malloc(sizeof(int));
-    }
-
-  }
-
-  it("fails the test when memory errors are expected but don't happen") {
-    expect(memory_errors);
-  }
-
-  it("fails the test when malloc is asked to fail but is never called") {
-    expect(malloc_to_fail);
-  }
-
-  /* TODO: "expect malloc to fail" should cause a test failure if it's not called, */
-  /* but "expect malloc to always fail" should not */
-  it("fails the test when malloc is asked to always fail but is never called") {
+  it("allows 'always' directive for malloc when malloc isn't called") {
     expect(malloc_to_always_fail);
   }
 
-  /* TODO: Should asking it to always move/fail cause the test to fail if it's */
-  /* not called? What if someone wants it to always do that when relevant?     */
-  it("fails the test when realloc is instructed to move, but is never called") {
-    expect(realloc_to_move);
+  it("allows 'always' directive for realloc when realloc is never called") {
     expect(realloc_to_always_move);
+  }
+
+  context("situations where test errors are expected from memory functions") {
+    /*
+    * An arena OOM or allocation stack overflow is treated as a regular failure
+    *   rather than a memory error. Normally, this would indicate a test needing
+    *   more space to successfully run, not that the actual logic behind the
+    *   test is wrong. These tests are separate from the malloc memory error
+    *   tests for that reason.
+    */
+    expect(to_fail);
+
+    it("will fail to allocate more memory than is present in the test arena") {
+      expect(cspec_malloc to be_null given(cspec_max_memory_pool_size));
+    }
+
+    it("fails if there's not enough space to grow the allocation") {
+      csByte* subject = cspec_malloc(10);
+      /* TODO: figure out the math on this - why does it not fail at max or up to +50? */
+      /*       answer: because 64 - 14 is 50 */
+      expect(cspec_realloc to be_null given(subject, cspec_max_memory_pool_size + 51));
+      cspec_free(subject);
+    }
+
+    it("will fail to allocate more than "STR(cspec_max_memory_allocs)" times") {
+      for (int i = 0; i < cspec_max_memory_allocs + 1; ++i) {
+        cspec_malloc(sizeof(int));
+      }
+    }
+
+    it("fails the test when memory errors are expected but don't happen") {
+      expect(memory_errors);
+    }
+
+    it("fails the test when malloc is asked to fail but is never called") {
+      expect(malloc_to_fail);
+    }
+
+    it("fails the test when realloc is asked to move, but is never called") {
+      expect(realloc_to_move);
+    }
+
   }
 
 }

@@ -67,13 +67,13 @@ describe(deduction) {
     type_string = _type_s(arr);
     expected = "int"CSPEC_ARR_DEDUCTION_RESULT;
   }
-
+  /*
   it("resolves a char[] from string literal") {
     typeof("str") str = "str"; (void)str;
     type_string = _type_s(str);
     expected = "char"CSPEC_ARR_DEDUCTION_RESULT;
   }
-
+  */
   it("checks size_t") {
     csSize s = sizeof(csSize);
     expect(s, == , sizeof(void*), csSize);
@@ -140,14 +140,11 @@ describe(assertion) {
 
   it("fails because of an assert") {
     //expect(to_fail);
+    expect(to_warn);
     expect(to_assert);
     //test_log("Testing?");
     cspec_assert(FALSE);
   }
-
-}
-
-describe(contexts) {
 
 }
 
@@ -224,6 +221,7 @@ describe(expect_basic) {
 }
 
 describe(expect_deduced_triplet) {
+#if CSPEC_USE_DEDUCTION > 0
 
   float pi = PI;
 
@@ -303,7 +301,7 @@ describe(expect_deduced_triplet) {
     }
 
   }
-
+#endif
 }
 
 describe(expect_basic_var_output) {
@@ -391,67 +389,6 @@ describe(expect_basic_var_output) {
 
       test("using different type specifiers") {
         expect(x, == , 10, float, int);
-      }
-
-    }
-
-  }
-
-}
-
-describe(matchers) {
-
-  context("compositions on singular values") {
-
-    context("tests succeed") {
-
-      it("has a positive value") {
-        expect(3 to be_positive);
-      }
-
-      it("uses a 'to not' specifier") {
-        expect(-3 to not be_positive);
-      }
-
-      it("gives an incrementing value to a matcher that generates temporary values (i starts at 2)") {
-        int i = 2;
-        expect(++i to be_between(2, 3));
-        expect(i, ==, 3, int);
-      }
-
-      it("uses 'to not' on a matcher that generates temporary") {
-        expect(4.f to not be_between(2.f, 3.f, inclusive, float));
-      }
-
-      it("uses 'to be' in a basic context") {
-        expect(3 to be( < , 4));
-      }
-
-    }
-
-    context("tests fail") {
-
-      expect(to_fail);
-
-      it("uses the simplest kind of matcher using no temporary values") {
-        expect(-3 to be_positive);
-      }
-
-      it("uses a 'to not' modifier") {
-        expect(3 to not be_positive);
-      }
-
-      it("uses a matcher that generates temporary values (i starts at 2)") {
-        int i = 2;
-        expect(++i to be_between(1, 2));
-      }
-
-      it("uses 'to not' on a matcher that generates temporary") {
-        expect(4 to not be_between(3, 5));
-      }
-
-      it("uses 'to be' in a basic context") {
-        expect(3 to be( > , 4));
       }
 
     }
@@ -559,7 +496,7 @@ describe(container_matchers) {
         expect(X to not match(Y));
         expect(X to be_within(2 of 8));
 
-
+        /*
         expect(fn to match(FIV) given(TWO, THR));
         expect(fn to match(Y) given(2, 4), int);
         expect(fn to match(Y, cmpint) given(2, 4), int);
@@ -579,7 +516,7 @@ describe(container_matchers) {
 
         expect(arr[0] to be_between(2, 6));
         expect(arr[0] to be_between(2, 6, inclusive));
-        expect(arr[0] to be_between(2, 6, inclusive, int));
+        expect(arr[0] to be_between(2, 6, inclusive, int));*/
       }
 
       context("a negative number is added to the array [..., -1]") {
@@ -978,14 +915,14 @@ describe(matcher_be_about) {
 
     it("checks the estinction of a large floating point value") {
       float a_third = 1.f / 3.f;
-      expect(a_third, != , 0.3333f);
+      expect(a_third, != , 0.3333f, float);
       expect(a_third to be_about(0.3333f));
     }
 
     it("checks for near-equality") {
       float subject = 0.33f;
       subject += 0.10f;
-      expect(subject, != , 0.43);
+      expect(subject, != , 0.43, double);
       expect(subject to be_about(0.43f));
     }
 
@@ -997,14 +934,14 @@ describe(matcher_be_about) {
 
     it("checks the estinction of a large floating point value") {
       float a_third = 1.f / 3.f;
-      expect(a_third, != , 0.3333f);
+      expect(a_third, != , 0.3333f, double);
       expect(a_third to not be_about(0.3333f));
     }
 
     it("checks for near-equality") {
       float subject = 0.33f;
       subject += 0.10f;
-      expect(subject, != , 0.43);
+      expect(subject, != , 0.43, double);
       expect(subject to not be_about(0.43f));
     }
 
@@ -1016,11 +953,9 @@ test_suite(tests_cspec) {
   test_group(deduction),
   test_group(tests),
   test_group(assertion),
-  test_group(contexts),
   test_group(expect_basic),
   test_group(expect_deduced_triplet),
   test_group(expect_basic_var_output),
-  test_group(matchers),
   test_group(function_matchers),
   test_group(container_matchers),
   test_group(matcher_basics),

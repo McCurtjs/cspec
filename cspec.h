@@ -265,7 +265,6 @@ typedef struct TestSuite {
 *   to replace with a version that can do dynamic strings.
 */
 #define cspec_log(message)        _cspec_log(0, __LINE__, NULL, message)
-#define cspec_log_fmt(...)        _cspec_log_fmt(0, __LINE__, __VA_ARGS__)
 
 /*
 * \brief Logs a warning message in the console output. The message is of higher
@@ -276,7 +275,6 @@ typedef struct TestSuite {
 *   restrictions as with test_log.
 */
 #define cspec_warn(warning)       _cspec_log(1, __LINE__, NULL, warning)
-#define cspec_warn_fmt(...)       _cspec_log_fmt(1, __LINE__, __VA_ARGS__)
 
 /*
 * \brief Automatically fails the test. Do not pass GO. Do not collect $200.
@@ -284,7 +282,6 @@ typedef struct TestSuite {
 * \param issue - String Literal: The error to print.
 */
 #define cspec_fail(issue)         _cspec_fail(issue)
-#define cspec_fail_fmt(...)       _cspec_fail_fmt(2, __LINE__, __VA_ARGS__)
 
 /*
 * \brief Prints a block of test memory for debugging purposes.
@@ -384,6 +381,8 @@ typedef struct TestSuite {
 */
 #define to_assert                 _cspec_test_directive(2, __LINE__)
 
+#define to_warn                   _cspec_test_directive(3, 0)
+
 /*
 * \brief Memory errors are treated differently from regular errors; a test
 *   expecting to fail will still actually fail if it encounters memory
@@ -393,7 +392,7 @@ typedef struct TestSuite {
 *
 * \param expect(memory_errors);
 */
-#define memory_errors             _cspec_test_directive(3, 0)
+#define memory_errors             _cspec_test_directive(4, 0)
 
 /*
 * \brief Force the next call to malloc to return NULL. Only the first call to
@@ -404,7 +403,7 @@ typedef struct TestSuite {
 *
 * \param expect(malloc_to_fail)
 */
-#define malloc_to_fail            _cspec_test_directive(4, 1)
+#define malloc_to_fail            _cspec_test_directive(5, 1)
 
 /*
 * \brief Force all remaining attempts to allocate memory for this test to fail.
@@ -414,7 +413,7 @@ typedef struct TestSuite {
 *
 * \param expect(malloc_to_always_fail)
 */
-#define malloc_to_always_fail     _cspec_test_directive(4, 0)
+#define malloc_to_always_fail     _cspec_test_directive(5, 0)
 
 /*
 * \brief Force realloc to move memory on the next invocation, even if there is
@@ -422,7 +421,7 @@ typedef struct TestSuite {
 *
 * \param expect(realloc_to_move)
 */
-#define realloc_to_move           _cspec_test_directive(5, 1)
+#define realloc_to_move           _cspec_test_directive(6, 1)
 
 /*
 * \brief Force realloc to always move memory for the remainder of the test, even
@@ -430,7 +429,7 @@ typedef struct TestSuite {
 *
 * \param expect(realloc_to_always_move)
 */
-#define realloc_to_always_move    _cspec_test_directive(5, 0)
+#define realloc_to_always_move    _cspec_test_directive(6, 0)
 
 //void cspec_realloc_always_moves(csBool enable);
 
@@ -590,7 +589,7 @@ typedef struct TestSuite {
 * \param - `expect(value to be_about(5.0f));` - expects the value to be
 *   approximately 5.0f.
 */
-#define be_about(N)               _be_within(cspec_epsilon, N, inclusive, float)
+#define be_about(N)              _be_within(cspec_epsilon, N, inclusive, double)
 
 #ifndef cspec_epsilon
 # define cspec_epsilon 0.0001f
@@ -815,14 +814,14 @@ typedef struct TestSuite {
 *
 * \param - `expect(malloc_count == 1);`
 */
-#define malloc_count              _cspec_test_directive(6, 0)
+#define malloc_count              _cspec_test_directive(7, 0)
 
 /*
 * \brief Gets the number of calls to free at this point in test execution
 *
 * \param - `expect(free_count == 1);`
 */
-#define free_count                _cspec_test_directive(7, 0)
+#define free_count                _cspec_test_directive(8, 0)
 
 void* cspec_malloc(csSize size);
 void  cspec_free(void* mem);
@@ -1047,7 +1046,6 @@ void    _cspec_log_fmt_exp(int status, int line, const char* fmt,
   const char* t_a6, const void* a6, const char* t_a7, const void* a7,
   const char* t_a8, const void* a8, const char* t_a9, const void* a9
 );
-//*/
 
 /* functions to copy basic types for output type deduction in C11 mode */
 void cpyint(void* dst, long long signed int src, csSize size);
@@ -1150,19 +1148,19 @@ void cpyptr(void* dst, const void* src, csSize size);
 # define _param_fn_arg(...) _csva_exp(_param_arg, _param_mty, __VA_ARGS__)
 # define _param_fn_str(...) _csva_exp(_param_mty, _param_str, __VA_ARGS__)
 #
-# define _cspec_fail_comp(S)              cspec_fail_fmt("expected "S"%n\nreceived {}", _type_s(_R), (void*)&_R);
-# define _cspec_fail_match(F, A, B, u, n) cspec_fail_fmt("expected "#A" to {}match "#B u(#F) "%n\nvalue 1: {}\nvalue 2: {}", "c str", n ? "not " : "", _type_s(_A), (void*)&_A, _type_s(_B), (void*)&_B);
-# define _cspec_fail_fn_expr(F, x, B, P)  cspec_fail_fmt("expected X "#x" "#B" where X == "#F#P"%n\nreceived {} "#x" {}" _param_fn_str P, _type_s(_R), (void*)&_R, _type_s(_B), (void*)&_B, _param_fn_arg P 0);
-# define _cspec_fail_fn_comp(S, P)        cspec_fail_fmt("expected "S"%n\nreceived {}" _param_fn_str P, _type_s(_R), (void*)&_R, _param_fn_arg P 0);
+# define _cspec_fail_comp(S)              _cspec_fail_fmt("expected "S"%n\nreceived {}", _type_s(_R), (void*)&_R);
+# define _cspec_fail_match(F, A, B, u, n) _cspec_fail_fmt("expected "#A" to {}match "#B u(#F) "%n\nvalue 1: {}\nvalue 2: {}", "c str", n ? "not " : "", _type_s(_A), (void*)&_A, _type_s(_B), (void*)&_B);
+# define _cspec_fail_fn_expr(F, x, B, P)  _cspec_fail_fmt("expected X "#x" "#B" where X == "#F#P"%n\nreceived {} "#x" {}" _param_fn_str P, _type_s(_R), (void*)&_R, _type_s(_B), (void*)&_B, _param_fn_arg P 0);
+# define _cspec_fail_fn_comp(S, P)        _cspec_fail_fmt("expected "S"%n\nreceived {}" _param_fn_str P, _type_s(_R), (void*)&_R, _param_fn_arg P 0);
 #
 #endif
 
 #if CSPEC_USE_DEDUCTION > 1
-# define _cspec_fail_fn_match(F, M, B, P, u, n) cspec_fail_fmt("expected result of "#F" to {}match "#B u(#M) " when given "#P"%n\nreturns: {}\ndesired: {}" _param_fn_str P, "c str", n ? "not " : "", _type_s(_R), (void*)&_R, _type_s(_B), (void*)&_B, _param_fn_arg P 0);
+# define _cspec_fail_fn_match(F, M, B, P, u, n) _cspec_fail_fmt("expected result of "#F" to {}match "#B u(#M) " when given "#P"%n\nreturns: {}\ndesired: {}" _param_fn_str P, "c str", n ? "not " : "", _type_s(_R), (void*)&_R, _type_s(_B), (void*)&_B, _param_fn_arg P 0);
 #
 # define _cspec_type_def(T, A, C) typeof((0, (C##_first(A))))
 #else
-# define _cspec_fail_fn_match(F, M, B, P, u, n, T_A, V_A, T_B, V_B) cspec_fail_fmt("expected result of "#F" to {}match "#B u(#M) " when given "#P"%n\nreturns: {}\ndesired: {}", "c str", n ? "not " : "", T_A, V_A, T_B, V_B)
+# define _cspec_fail_fn_match(F, M, B, P, u, n, T_A, V_A, T_B, V_B) _cspec_fail_fmt("expected result of "#F" to {}match "#B u(#M) " when given "#P"%n\nreturns: {}\ndesired: {}", "c str", n ? "not " : "", T_A, V_A, T_B, V_B)
 #
 # define _cspec_type_def(T, A, C) int
 #endif
@@ -1188,13 +1186,14 @@ void cpyptr(void* dst, const void* src, csSize size);
 #define _test_group(TEST_FN) { .line = &_fn_line_##TEST_FN, .header=#TEST_FN, .group_fn = test_##TEST_FN }
 #define _test_suite_end { .line = NULL, .group_fn = NULL } })
 
+#define _cspec_fail_fmt(...)       _cspec_fail_va(2, __LINE__, __VA_ARGS__)
 #define _cspec_fail(issue) do { _cspec_log(2, __LINE__, NULL, issue); return; } while(0)
-#define _cspec_fail_fmt(level, line, ...) do { _cspec_log_fmt(level, line, __VA_ARGS__); return; } while(0)
+#define _cspec_fail_va(level, line, ...) do { _cspec_log_fmt(level, line, __VA_ARGS__); return; } while(0)
 
 #define _cspec_log_fmt_va(level, line, fmt, A,a,B,b,C,c,D,d,E,e,F,f,G,g,H,h,I,i,J,j,...) _cspec_log_fmt_exp(level,line,fmt,A,a,B,b,C,c,D,d,E,e,F,f,G,g,H,h,I,i,J,j)
 #define _cspec_log_fmt(level, line, /* fmt, */ ...) _cspec_log_fmt_va(level,line,__VA_ARGS__,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0)
 
-#define _cspec_fail_t(A, x, B, sTa, sTb) _cspec_fail_fmt(2, __LINE__, "expected "#A" "#x" "#B"%n\nreceived {} "#x" {}", sTa, (void*)&_A, sTb, (void*)&_B)
+#define _cspec_fail_t(A, x, B, sTa, sTb) _cspec_fail_va(2, __LINE__, "expected "#A" "#x" "#B"%n\nreceived {} "#x" {}", sTa, (void*)&_A, sTb, (void*)&_B)
 #define _cspec_fail_all(S, T) {                                                                                                                           \
   _cspec_log(2, __LINE__, NULL, "expected "S);                                                                                                            \
     if (_pvalue) {                                                                                                                                        \
@@ -1219,14 +1218,14 @@ void cpyptr(void* dst, const void* src, csSize size);
 #   define _expect_fn_mtyp(S, F, n, M, B, u, _, P, T, ...)  T _R = (F P); T _S = (B); csBool   _test = M(_R, _S);                     if (!_test ^ n)       _cspec_fail_fn_match(F, M, B, P, u, n, #T, &_R, #T, &_S)
 #   define _expect_fn_mtch(S, F, n, M, B, u, _, P, ...)     (void)B; _deduct_warn("expect("#F" to match("#B") given"#P", <type>)");                         cspec_warn("C11 required for 'match' matcher without providing explicit type");
 #   define _expect_expr(S, A, x, B, ...)                    _deduct_warn("expect(lhs, "#x" , rhs, <type>)");                          if (!(A x B))         cspec_fail("expected "#A" "#x" "#B)
-#   define _expect_mtch(S, A, n, F, B, u, ...)                                        csBool   _test = F(A, B);                       if (!_test ^ n)       cspec_fail_fmt("expected "#A" to {}match "#B u(#F), "c str", n ? "not " : "");
+#   define _expect_mtch(S, A, n, F, B, u, ...)                                        csBool   _test = F(A, B);                       if (!_test ^ n)       _cspec_fail_fmt("expected "#A" to {}match "#B u(#F), "c str", n ? "not " : "");
 #   define _expect_comp(S, A, F, ...)                                                 csBool   _test = F(A);                          if (!_test)           cspec_fail("expected "S)
 # else
 #   define _expect_fn_mtyp(S, F, n, M, B, u, _, P, T, ...)  T _R = (F P); T _S = (B); T* _A = &_R; T* _B = &_S;                       if (!(M(_R, _S)) ^ n) _cspec_fail_fn_match(F, M, B, P, u, n, #T, _A, #T, _B)
 #   define _expect_fn_mtch(S, F, n, M, B, u, _, P, ...)     AUTO_DUP(_A , (F P));     AUTO_DUP(_B    , (B));                          if (!(M(_A, _B)) ^ n) _cspec_fail_fn_match(F, M, B, P, u, n, _type_s(F P), _A, _type_s(B), _B)
-#   define _expect_expr(S, A, x, B, ...)                                                                                              if (!((A) x (B)))     { AUTO_DUP(_A, (A)); AUTO_DUP(_B, (B)); cspec_fail_fmt("expected "#A" "#x" "#B"%n\nreceived {} "#x" {}",      _type_s(A), _A, _type_s(B), _B); }
-#   define _expect_mtch(S, A, n, F, B, u, ...)              AUTO_DUP(_A , (A));       AUTO_DUP(_B    , (B));                          if (!F((A), (B)) ^ n) cspec_fail_fmt("expected "#A" to {}match "#B u(#F) "%n\nvalue 1: {}\nvalue 2: {}", "c str", n ? "not " : "",  _type_s(A), _A, _type_s(B), _B);
-#   define _expect_comp(S, A, F, ...)                                                 csBool   _test = F(A);                          if (!_test)           { AUTO_DUP(_R, (A)); cspec_fail_fmt("expected "S"%n\nreceived {}",                                            _type_s(A), _R); }
+#   define _expect_expr(S, A, x, B, ...)                                                                                              if (!((A) x (B)))     { AUTO_DUP(_A, (A)); AUTO_DUP(_B, (B)); _cspec_fail_fmt("expected "#A" "#x" "#B"%n\nreceived {} "#x" {}",      _type_s(A), _A, _type_s(B), _B); }
+#   define _expect_mtch(S, A, n, F, B, u, ...)              AUTO_DUP(_A , (A));       AUTO_DUP(_B    , (B));                          if (!F((A), (B)) ^ n) _cspec_fail_fmt("expected "#A" to {}match "#B u(#F) "%n\nvalue 1: {}\nvalue 2: {}", "c str", n ? "not " : "",  _type_s(A), _A, _type_s(B), _B);
+#   define _expect_comp(S, A, F, ...)                                                 csBool   _test = F(A);                          if (!_test)           { AUTO_DUP(_R, (A)); _cspec_fail_fmt("expected "S"%n\nreceived {}",                                            _type_s(A), _R); }
 # endif
 #endif
 #define _expect_all(S, A, F, M, B, T, R, C, ...)                                      csBool   _test = F(A, B, C, R(T, A, C), M);     if (!_test)           _cspec_fail_all(S, T)
@@ -1282,12 +1281,13 @@ void cpyptr(void* dst, const void* src, csSize size);
 #define _be_within(B_EXT, C_MID, MODE, T) _matcher_setup(B_EXT, C_MID, T) _be_within_##MODE
 #define _be_within_select(EXT, MID, MODE, T,_a,_c,P3,...) _be_within(EXT, MID, MODE, _pick_##P3(T, _a, ><, ><))
 
+#define _typeof_first(B, ...) typeof(B)
 #if CSPEC_USE_DEDUCTION > 1
-# define _be_within_va(B, ...)  _be_within_select(B, __VA_ARGS__/*C*/, inclusive, typeof(B), 0, 1, 0)
-# define _be_between_va(B, ...) _be_between_select(B, __VA_ARGS__/*C*/, inclusive, typeof(B), 0, 1, 0)
+# define _be_within_va(...)  _be_within_select(__VA_ARGS__/*B, C*/, inclusive, _typeof_first(__VA_ARGS__), 0, 1, 0)
+# define _be_between_va(...) _be_between_select(__VA_ARGS__/*B, C*/, inclusive, _typeof_first(__VA_ARGS__), 0, 1, 0)
 #else
-# define _be_within_va(B, ...)  _be_within_select(B, __VA_ARGS__/*C*/, inclusive, int, 0, 1, 0)
-# define _be_between_va(B, ...) _be_between_select(B, __VA_ARGS__/*C*/, inclusive, int, 0, 1, 0)
+# define _be_within_va(...)  _be_within_select(__VA_ARGS__/*B, C*/, inclusive, int, 0, 1, 0)
+# define _be_between_va(...) _be_between_select(__VA_ARGS__/*B, C*/, inclusive, int, 0, 1, 0)
 #endif
 
 #endif

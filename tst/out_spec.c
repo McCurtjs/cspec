@@ -49,7 +49,7 @@ describe(out_read_and_clear) {
   it("writes a char and verifies size before verifying empty") {
     cspec_out_ch('.');
     /* cspec_out_read terminates the string, but always returns the same ptr */
-    expect(cspec_out_read(), == , pOut);
+    expect(cspec_out_read(), == , pOut, const char*);
     csSize length = cspec_strlen(pOut);
     cspec_out_clear();
     expect(length == 1u);
@@ -58,7 +58,7 @@ describe(out_read_and_clear) {
   after {
     cspec_out_clear();
     csSize length = cspec_strlen(pOut);
-    expect(length, == , 0u);
+    expect(length, == , 0u, csSize);
   }
 
 }

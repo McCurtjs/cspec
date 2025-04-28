@@ -104,7 +104,7 @@ describe(cspec_memcpy) {
     cspec_memcpy(dst, NULL, sizeof(int));
     cspec_memcpy(NULL, dst, sizeof(int));
     cspec_memcpy(NULL, NULL, sizeof(NULL));
-    expect(dst[0], == , 9);
+    expect(dst[0], == , 9, int);
   }
 
   it("to copy an array of ints") {
@@ -130,13 +130,13 @@ describe(cspec_memrev) {
     csUint testvar = 1u;
     cspec_memrev(NULL, 1, sizeof(testvar));
     cspec_memrev(&testvar, 0, sizeof(testvar));
-    expect(testvar, == , 1u);
+    expect(testvar, == , 1u, csUint);
   }
 
   it("reverses the bytes of a variable") {
     csUint testvar = 0xff;
     cspec_memrev(&testvar, 1, sizeof(testvar));
-    expect(testvar, == , 0xff000000);
+    expect(testvar, == , 0xff000000, csUint);
   }
 
   context("when operating on elements with a size of 1") {
@@ -238,7 +238,7 @@ describe(cspec_strncpy) {
     cspec_strncpy(NULL, NULL, 0u);
     cspec_strncpy(dst, NULL, 20u);
     cspec_strncpy(dst, "Test", 0u);
-    expect(dst[0], == , 'x');
+    expect(dst[0], == , 'x', char);
   }
 
   it("handles being given a smaller length than source string") {

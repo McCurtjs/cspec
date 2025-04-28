@@ -40,7 +40,7 @@
 #  define real_assert(CONDITION) (!(CONDITION) ? __builtin_trap() : 0)
 # endif
 #elif defined(_MSC_VER)
-# define real_assert(X) (!(X) ? __debugbreak() : 0)
+# define real_assert(X) (!(X) ? (__debugbreak(), 0) : 0)
 #endif
 
 #ifndef real_assert
@@ -125,6 +125,7 @@ enum Directives {
   D_NONE,
   D_EXPECT_FAIL,
   D_EXPECT_ASSERT,
+  D_EXPECT_WARNING,
   D_EXPECT_MEMFAIL,
   D_FORCE_MALLOC_NULL,
   D_FORCE_REALLOC_MOVE,
@@ -195,6 +196,7 @@ struct TestPass {
   csUint count_mallocs;
   csUint count_frees;
   csUint count_expects;
+  csBool expect_warning;
   csBool expect_fail;
   csBool expect_assert;
   csBool expect_memory_error;
@@ -786,6 +788,8 @@ void cspec_log_start(void) {
 }
 
 int _cspec_log_fmt_start(int status, int line) {
+  csBool warning_captured = FALSE;
+
   if (test.in_progress) {
     switch (status) {
     case S_NOMINAL:
@@ -795,7 +799,13 @@ int _cspec_log_fmt_start(int status, int line) {
 
     case S_WARNING:
       if (test.current_line && test.current_line >= line) return 0;
-      test.pass.warned = TRUE;
+      if (test.pass.expect_warning) {
+        warning_captured = TRUE;
+        test.pass.expect_warning = FALSE;
+        if (!param.verbose) return 0;
+      } else {
+        test.pass.warned = TRUE;
+      }
       break;
 
     case S_FAILURE:
@@ -834,6 +844,10 @@ int _cspec_log_fmt_start(int status, int line) {
   }
   else if (status == S_WARNING) {
     cspec_out_str("%c");
+  }
+
+  if (warning_captured) {
+    cspec_out_str("(warning expected) ");
   }
 
   return old_stop;
@@ -1099,6 +1113,8 @@ static csBool _cspec_mem_check_fence(MemoryRecord* record) {
   return TRUE;
 }
 
+
+
 static MemoryRecord* _cspec_mem_rec_from_ptr(const void* ptr) {
   for (csUint i = 0; i < test.pass.count_mallocs; ++i) {
     MemoryRecord* rec = &test.mem.records[i];
@@ -1109,6 +1125,8 @@ static MemoryRecord* _cspec_mem_rec_from_ptr(const void* ptr) {
   return NULL;
 }
 
+
+
 static csBool _cspec_mem_unused() {
   return test.pass.count_mallocs == 0
       && test.pass.count_frees == 0
@@ -1116,6 +1134,8 @@ static csBool _cspec_mem_unused() {
       && test.pass.force_realloc_move == M_NORMAL
       && test.pass.expect_memory_error == FALSE;
 }
+
+
 
 static void _cspec_mem_reset(csBool force) {
   /* We can usually skip the reset if memory testing wasn't being used */
@@ -1133,6 +1153,8 @@ static void _cspec_mem_reset(csBool force) {
   csSize records_size = sizeof(MemoryRecord) * cspec_max_memory_allocs;
   cspec_memset(test.mem.records, 0x00, records_size);
 }
+
+
 
 static void _cspec_mem_check_final(void) {
 
@@ -1190,10 +1212,8 @@ static void _cspec_mem_check_final(void) {
     }
   }
 
-  /* Ensure malloc was called if it was asked to fail */
-  if (test.pass.force_malloc_null >= M_HAPPENED
-  && !test.pass.count_expected_malloc_fails
-  ) {
+  /* Ensure malloc was called if it was asked to fail once */
+  if (test.pass.force_malloc_null == M_ONCE) {
     /*
     * causes regular error rather than memory error, since this is a failure
     * within the test design rather than memory actually breaking (ie, using
@@ -1203,7 +1223,16 @@ static void _cspec_mem_check_final(void) {
       "memory error: after: malloc fail requested, but never called"
     );
   }
+
+  /* Ensure realloc was called if it was explicitly asked to move memory */
+  if (test.pass.force_realloc_move == M_ONCE) {
+    _cspec_log(S_FAILURE, 0, NULL,
+      "memory error: after: realloc force move requested, but never called"
+    );
+  }
 }
+
+
 
 void* cspec_malloc(csSize size) {
 
@@ -1274,6 +1303,8 @@ void* cspec_malloc(csSize size) {
   return record->ptr;
 }
 
+
+
 void cspec_free(void* mem_) {
   csByte* const mem = mem_;
 
@@ -1321,12 +1352,16 @@ void cspec_free(void* mem_) {
   ++test.pass.count_frees;
 }
 
+
+
 void* cspec_calloc(csSize ct, csSize sel) {
   csByte* ret = cspec_malloc(ct * sel);
   if (!ret) return NULL;
   cspec_memset(ret, 0, ct * sel);
   return ret;
 }
+
+
 
 void* cspec_realloc(void* mem_, csSize nsize) {
   csByte* const mem = mem_;
@@ -1423,8 +1458,8 @@ void* cspec_realloc(void* mem_, csSize nsize) {
 
   if (next > memory_size_full + memory_size_barrier) {
     test.pass.expect_memory_error = FALSE;
-    _cspec_log(S_MEMFAIL, 0, NULL,
-      "malloc: ran out of test memory space! Increase limit from "
+    _cspec_log(S_FAILURE, 0, NULL,
+      "realloc: ran out of test memory space! Increase limit from "
       STR(cspec_max_memory_pool_size)" bytes."
     );
     return NULL;
@@ -1680,44 +1715,52 @@ csBool _cspec_test_end(void) {
     return FALSE;
   }
 
+  ++test.count;
+
+  /* if an assert was expected but not received, fail the test  */
   if (test.pass.expect_assert && !test.pass.critical) {
-    test.pass.failed = TRUE;
+    _cspec_log(S_FAILURE, 0, NULL, "expected an assert, but received none");
   }
 
+  /* only check for memory issues if the test hasn't already been failed */
   if (!test.pass.failed && !param.skip_memory_test) {
     _cspec_mem_check_final();
   }
 
-  ++test.count;
+  /* if memory errors were expected but didn't happen, it's a test failure */
+  if (test.pass.expect_memory_error && !test.pass.memory_error) {
+    _cspec_log(S_FAILURE, 0, NULL, "expected memory error, but detected none");
+  }
 
-  if (test.pass.failed   == test.pass.expect_fail
-  &&  test.pass.critical == test.pass.expect_assert
-  &&  test.pass.memory_error == test.pass.expect_memory_error
-  ) {
+  /* each expect(to_warn) must be paired with exactly one warning each */
+  if (test.pass.expect_warning) {
+    _cspec_log(S_FAILURE, 0, NULL, "expected a warning, but didn't receive one");
+  }
+
+  /* consolidate test warnings */
+  if (test.pass.warned) {
+    ++test.count_warnings;
+  }
+
+  /* final check for test pass or fail */
+  if (test.pass.failed == test.pass.expect_fail) {
     ++test.count_passed;
 
     if (test.pass.count_expects == 0 && test.pass.count_mallocs == 0) {
+      /* "not implemented" warning cannot be disabled */
       _cspec_log_headers(CONCOL_Yellow, P_LOGGED, " (not implemented)");
       ++test.count_warnings;
 
     } else if (param.verbose >= V_RUN || param.line) {
       csBool failed = test.pass.expect_fail;
       failed |= test.pass.expect_memory_error;
+      failed |= test.pass.expect_assert;
       const char* failnote = failed ? " (failed successfully)" : NULL;
       _cspec_log_headers(CONCOL_Green, P_LOGGED, failnote);
     }
-  } else {
-    if (test.pass.expect_fail && !test.pass.failed) {
-      test.pass.expect_fail = FALSE; /* clear this so it prints the error */
-      _cspec_log(S_FAILURE, 0, NULL, "expected to fail, but succeeded instead");
-    }
-    if (test.pass.expect_assert && !test.pass.critical) {
-      test.pass.expect_fail = FALSE;
-      _cspec_log(S_FAILURE, 0, NULL, "expected an assert failure, but received none");
-    }
-    if (test.pass.expect_memory_error && !test.pass.memory_error) {
-      _cspec_log(S_FAILURE, 0, NULL, "expected memory errors, but none were found");
-    }
+  } else if (!test.pass.failed) {
+    test.pass.expect_fail = FALSE;
+    _cspec_log(S_FAILURE, 0, NULL, "expected to fail, but succeeded instead");
   }
 
   test.in_progress = FALSE;
@@ -1752,6 +1795,10 @@ int _cspec_test_directive(int mode, int value) {
       "expecting assertion failure, but handling is disabled"
     );
 #endif
+    break;
+
+  case D_EXPECT_WARNING:
+    test.pass.expect_warning = TRUE;
     break;
 
   case D_EXPECT_MEMFAIL:
@@ -1802,6 +1849,66 @@ static csBool _cspec_run_param(char c) {
   return handled;
 }
 
+static const char* _cspec_exe_name(const char* filename) {
+  csUint last_slash = 0;
+  for (csUint i = 0; filename[i]; ++i) {
+    if (filename[i] == '/' || filename[i] == '\\') {
+      last_slash = i+1;
+    }
+  }
+  return filename + last_slash;
+}
+
+void _cspec_print_help(const char* argv0) {
+  const char* exename = _cspec_exe_name(argv0);
+
+  cspec_out_fmt("CSpec 0.1.{} for C version: ");
+  cspec_out_uint(CSPEC_USE_DEDUCTION);
+#ifdef __STDC_VERSION__
+  cspec_out_uint(__STDC_VERSION__);
+#elif defined(_MSC_VER)
+  cspec_out_str("?? MSVC: ");
+  cspec_out_uint(_MSC_VER);
+#else
+  cspec_out_str("mystery");
+#endif
+  cspec_out_print();
+  cspec_out_fmt(
+    ":"
+    "\n: Usage: {} [OPTIONS]"
+    "\n:      : {} filename [OPTIONS]"
+    "\n:      : {} filename:line [OPTIONS]"
+    "\n:"
+  );
+  cspec_out_str(exename);
+  cspec_out_str(exename);
+  cspec_out_str(exename);
+  cspec_out_print();
+  cspec_out_str(
+    ": If filename is given, limits tests to that file. Matches end of name."
+    "\n: If line is given, runs only that test, context, or group."
+    "\n:"
+  );
+  cspec_out_print();
+  cspec_out_str(
+    ": - -- Options       Args"
+    "\n: h help                            : prints this message"
+    "\n: n                                 : verbose output (includes user notes)"
+    "\n: v verbose                         : verbose output (prints all tests run)"
+    "\n: V                                 : verbose output (maximum)"
+    "\n: p padding                         : adds empty lines around error outputs for readability"
+    "\n: t tab-size         n (default 2)  : spaces per indent in test output"
+  );
+  cspec_out_print();
+  cspec_out_str(
+    ": f force-fails                     : disables 'expect(to_fail)', printing failure output"
+    "\n: r results                         : prints extended results on success (todo)"
+    "\n: m ignore-memory                   : disables memory testing"
+    "\n: s show-types                      : prints deduced types in error output"
+  );
+  cspec_out_print();
+}
+
 static csBool _cspec_run_args(int argc, char* argv[]) {
   for (int i = 1; i < argc; ++i) {
     char* arg = argv[i];
@@ -1818,27 +1925,7 @@ static csBool _cspec_run_args(int argc, char* argv[]) {
       }
 
       if (cspec_streq(arg, "-h") || cspec_streq(arg, "--help")) {
-        cspec_out_str(
-          ": Usage: tests [OPTIONS]"
-          "\n:      : tests filename [OPTIONS]"
-          "\n:      : tests filename:line [OPTIONS]"
-          "\n:"
-          "\n: If filename is given, limits tests to that file. Matches end of name."
-          "\n: If line is given, runs only that test, context, or group."
-          "\n:"
-          "\n: - -- Options       Args"
-          "\n: h help                            : prints this message"
-          "\n: n                                 : verbose output (includes user notes)"
-          "\n: v verbose                         : verbose output (prints all tests run)"
-          "\n: V                                 : verbose output (maximum)"
-          "\n: p padding                         : adds empty lines around error outputs for readability"
-          "\n: t tab-size         n (default 2)  : spaces per indent in test output"
-          "\n: f force-fails                     : disables 'expect(to_fail)', printing failure output"
-          "\n: r results                         : prints extended results on success (todo)"
-          "\n: m ignore-memory                   : disables memory testing"
-          "\n: s show-types                      : prints deduced types in error output"
-        );
-        cspec_out_print();
+        _cspec_print_help(argv[0]);
         return TRUE;
 
       } else if (cspec_streq(arg, "--verbose")) {
