@@ -1240,7 +1240,6 @@ void cpyptr(void* dst, const void* src, csSize size);
 #define _all_comp_be(A, B, C, T, x)     _all_comp_shared(A, B, C, T, ((*_iter_all) x (B)),  _expected = (B);  )
 #define _all_comp_match(A, B, C, T, F)  _all_comp_shared(A, B, C, T, F(*_iter_all, (B)),    _expected = (B);  )
 
-
 #define _all(M, T_CON, T_EL, T_SEL)             FALSE; csBool _print_expected_value = FALSE;  _all_comp,       M,  ><, T_EL, _cspec_type_##T_SEL,  T_CON
 #define _all_be(x, B, T_CON, T_EL, T_SEL)       FALSE; csBool _print_expected_value = TRUE;   _all_comp_be,    x,  B,  T_EL, _cspec_type_##T_SEL,  T_CON
 #define _all_match(B, FN, T_CON, T_EL, T_SEL)   FALSE; csBool _print_expected_value = TRUE;   _all_comp_match, FN, B,  T_EL, T_SEL,                T_CON

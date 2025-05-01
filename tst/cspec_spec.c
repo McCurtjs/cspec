@@ -496,7 +496,7 @@ describe(container_matchers) {
         expect(X to not match(Y));
         expect(X to be_within(2 of 8));
 
-        /*
+        //*
         expect(fn to match(FIV) given(TWO, THR));
         expect(fn to match(Y) given(2, 4), int);
         expect(fn to match(Y, cmpint) given(2, 4), int);
@@ -516,7 +516,7 @@ describe(container_matchers) {
 
         expect(arr[0] to be_between(2, 6));
         expect(arr[0] to be_between(2, 6, inclusive));
-        expect(arr[0] to be_between(2, 6, inclusive, int));*/
+        expect(arr[0] to be_between(2, 6, inclusive, int));//*/
       }
 
       context("a negative number is added to the array [..., -1]") {

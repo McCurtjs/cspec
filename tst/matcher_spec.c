@@ -316,10 +316,132 @@ describe(matchers_compound_failed) {
 
 }
 
+typedef struct TestStructInts {
+  int x, y, z;
+} TestStructInts;
+
+typedef struct TestStructChars {
+  char c[12];
+} TestStructChars;
+
+#if CSPEC_USE_DEDUCTION == 1
+void cpystint(void* out, TestStructInts i, csSize size) {
+  cspec_memcpy(out, &i, size);
+}
+void cpystchr(void* out, TestStructChars ch, csSize size) {
+  cspec_memcpy(out, &ch, size);
+}
+
+# undef CSPEC_CUSTOM_TYPES_CPYFN
+# define CSPEC_CUSTOM_TYPES_CPYFN TestStructInts: cpystint, TestStructChars: cpystchr, 
+
+# undef CSPEC_CUSTOM_TYPES
+# define CSPEC_CUSTOM_TYPES default: "nope",
+#endif
+
+describe(matcher_match) {
+
+  context("in situations that work in every mode") {
+
+    it("checks for binary equivalence of data") {
+      int x = 12347, y = 12347, z = 75432;
+      expect(x to match(y));
+      expect(x to not match(z));
+    }
+
+    it("will not match values of types with different sizes") {
+      int i = 123;
+      char c = 123;
+      expect(i to not match(c));
+    }
+
+    it("will match C-style arrays") {
+      char str1[] = "This is a string";
+      char str2[] = "This is a string";
+      char str3[] = "This is a string also";
+      expect(str1 to match(str2));
+      expect(str2 to not match(str3));
+    }
+    /*
+    it("will match custom values/structs with a specified type") {
+      TestStructInts A = { .x = 1819043144, .y = 1752440943, .z = 6648421 };
+      TestStructInts B = { .x = 1819043144, .y = 1752440943, .z = 6648421 };
+      TestStructInts C = { .x = 1819043144, .y = 1752440943, .z = 6648421 };
+      expect(A to match(B), TestStructInts);
+    }*/
+
+  }
+
+  context("comparisons that only work in C23 (CSPEC_USE_DEDUCTION > 1)") {
+#if CSPEC_USE_DEDUCTION > 1
+
+
+
+#else
+
+#endif
+  }
+
+  context("comparisons that work in C11 and C23 but not C99 (CSPEC_USE_DEDUCTION > 0)") {
+#if CSPEC_USE_DEDUCTION > 0
+
+    it("can accept basic type literal values") {
+      expect('a' to match(0x61));
+    }
+
+#else
+    it("cannot accept literal values of basic types");
+#endif
+  }
+
+  context("comparisons that work in C23 and C99 but oddly not in C11 without fudging (CSPEC_USE_DEDUCTION != 0)") {
+#if CSPEC_USE_DEDUCTION != 1
+
+    it("can match variables of arbitarry types") {
+
+    }
+
+#else
+    expect(TRUE);
+
+    it("cannot match variables of arbitrary types") {
+      cspec_log_start();
+      cspec_out_str("You can match structs by memory by defining the following before the match expectation:%n\n");
+      cspec_out_str("- CSPEC_CUSTOM_TYPES\n");
+      cspec_out_str("- CSPEC_CUSTOM_TYPES_CPYFN%n");
+      cspec_out_print();
+    }
+#endif
+  }
+
+  it("is type agnostic by default and compares memory directly") {
+    TestStructInts A = { .x = 1819043144, .y = 1752440943, .z = 6648421 };
+    TestStructChars B = { .c = "Hello there" };
+    //cpyptr(&C, &(void*){ &A }, sizeof(C));
+    expect(A to match(B));
+    //expect(1 to match(2));
+
+    //char cc[] = (char[sizeof(TestStructInts)])A;
+
+
+    //int arr1[] = { 1819043144, 1752440943, 6648421 };
+    //char arr2[] = "Hello there";
+    //expect(arr1 to match(arr2, cspec_streq));
+    //expect(arr1 to match(arr2));
+  }
+
+}
+
+describe(matcher_function) {
+
+}
+
 test_suite(tests_cspec_matchers) {
-	test_group(matchers_basic),
+  test_group(matchers_basic),
   test_group(matchers_basic_failed),
   test_group(matchers_compound),
   test_group(matchers_compound_failed),
-	test_suite_end
+  test_group(matcher_match),
+  test_group(matcher_function),
+  test_suite_end
 };

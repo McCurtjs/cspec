@@ -46,8 +46,8 @@ int main(int argc, char* argv[]) {
 #endif
 
 #ifdef CSPEC_MSVC
-  argv = (char*[]){ argv[0], "-v", "matcher_spec.c"};
-  argc = 2;
+  argv = (char*[]){ argv[0], "-vs", "matcher_spec.c"};
+  argc = 3;
 #endif
 
   TestSuite* test_suites[] = {

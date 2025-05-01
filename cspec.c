@@ -387,8 +387,12 @@ void cpyuint(void* dst, long long unsigned int src, csSize size) {
 }
 
 void cpyflt(void* dst, double src, csSize size) {
-  if (size == 4) { float f32 = (float)src; cspec_memcpy(dst, &f32, size); }
-  else cspec_memcpy(dst, &src, size);
+  if (size == 4) {
+    float f32 = (float)src;
+    cspec_memcpy(dst, &f32, size);
+  } else {
+    cspec_memcpy(dst, &src, size);
+  }
 }
 
 void cpyptr(void* dst, const void* ptr, csSize size) {
@@ -659,7 +663,7 @@ static void _cspec_out_print(ConsoleColor color) {
 }
 
 void cspec_out_print(void) {
-  _cspec_out_print(CONCOL_White);
+  if (param.verbose >= V_NOTES) _cspec_out_print(CONCOL_White);
 }
 #endif
 
@@ -698,7 +702,7 @@ static void _cspec_log_mem_row(const csByte* row, csBool target) {
     }
   }
 
-  cspec_out_print();
+  _cspec_out_print(CONCOL_White);
 }
 
 static void _cspec_log_mem_record(const MemoryRecord* record) {
@@ -707,7 +711,7 @@ static void _cspec_log_mem_record(const MemoryRecord* record) {
     _cspec_log_mem_row(record->ptr + i - 16, i == 16);
     i += 16;
   }
-  if (param.padding) cspec_out_print();
+  if (param.padding) _cspec_out_print(0);
 }
 
 static MemoryRecord* _cspec_mem_rec_from_ptr(const void* ptr);
@@ -750,7 +754,7 @@ static void _cspec_log_headers(
 
     if (!test.in_progress) {
       cspec_out_str("pre-test");
-      cspec_out_print();
+      _cspec_out_print(CONCOL_White);
       test.printed_description = P_ERROR;
     } else {
       cspec_out_str(test.description);
@@ -867,7 +871,7 @@ void _cspec_log(int status, int line, const void* mem, const char* message) {
     ConsoleColor color = test.pass.warned ? CONCOL_Yellow : CONCOL_bYellow;
     _cspec_out_print(color);
   } else {
-    cspec_out_print();
+    _cspec_out_print(CONCOL_White);
   }
 
   if (mem) {
@@ -876,7 +880,7 @@ void _cspec_log(int status, int line, const void* mem, const char* message) {
     /* check if the pointer is in our allocated blocks list */
     MemoryRecord* record = _cspec_mem_rec_from_ptr(mem);
 
-    if (param.padding) cspec_out_print();
+    if (param.padding) _cspec_out_print(0);
 
     if (record) {
       _cspec_log_mem_record(record);
@@ -890,7 +894,7 @@ void _cspec_log(int status, int line, const void* mem, const char* message) {
     test.out.tabstop -= param.tabsize;
   }
 
-  if (param.padding) cspec_out_print();
+  if (param.padding) _cspec_out_print(0);
 }
 
 static csBool _cspec_log_param(const char* typ_N, const void* N) {
@@ -1089,10 +1093,10 @@ void _cspec_log_fmt_exp(
     ConsoleColor color = test.pass.warned ? CONCOL_Yellow : CONCOL_bYellow;
     _cspec_out_print(color);
   } else {
-    cspec_out_print();
+    _cspec_out_print(CONCOL_White);
   }
 
-  if (param.padding) cspec_out_print();
+  if (param.padding) _cspec_out_print(0);
 }
 
 #endif
@@ -1207,7 +1211,7 @@ static void _cspec_mem_check_final(void) {
         cspec_out_fmt("mallocs: {}, frees: {}%n");
         cspec_out_int(test.pass.count_mallocs);
         cspec_out_int(test.pass.count_frees);
-        cspec_out_print();
+        _cspec_out_print(CONCOL_White);
       }
     }
   }
@@ -1872,7 +1876,7 @@ void _cspec_print_help(const char* argv0) {
 #else
   cspec_out_str("mystery");
 #endif
-  cspec_out_print();
+  _cspec_out_print(CONCOL_White);
   cspec_out_fmt(
     ":"
     "\n: Usage: {} [OPTIONS]"
@@ -1883,13 +1887,13 @@ void _cspec_print_help(const char* argv0) {
   cspec_out_str(exename);
   cspec_out_str(exename);
   cspec_out_str(exename);
-  cspec_out_print();
+  _cspec_out_print(CONCOL_White);
   cspec_out_str(
     ": If filename is given, limits tests to that file. Matches end of name."
     "\n: If line is given, runs only that test, context, or group."
     "\n:"
   );
-  cspec_out_print();
+  _cspec_out_print(CONCOL_White);
   cspec_out_str(
     ": - -- Options       Args"
     "\n: h help                            : prints this message"
@@ -1899,14 +1903,14 @@ void _cspec_print_help(const char* argv0) {
     "\n: p padding                         : adds empty lines around error outputs for readability"
     "\n: t tab-size         n (default 2)  : spaces per indent in test output"
   );
-  cspec_out_print();
+  _cspec_out_print(CONCOL_White);
   cspec_out_str(
     ": f force-fails                     : disables 'expect(to_fail)', printing failure output"
     "\n: r results                         : prints extended results on success (todo)"
     "\n: m ignore-memory                   : disables memory testing"
     "\n: s show-types                      : prints deduced types in error output"
   );
-  cspec_out_print();
+  _cspec_out_print(CONCOL_White);
 }
 
 static csBool _cspec_run_args(int argc, char* argv[]) {
@@ -1956,7 +1960,7 @@ static csBool _cspec_run_args(int argc, char* argv[]) {
           param.tabsize = as_i > 0 ? as_i : 0;
         } else {
           cspec_out_str("--tab-size requires a number as an argument");
-          cspec_out_print();
+          _cspec_out_print(CONCOL_White);
           return TRUE;
         }
       }
@@ -2129,7 +2133,7 @@ extern void cspec_default_print_backtrace(void) {
   for (int i = 0; i < FRAMES; ++i) {
     SymFromAddr(process, (DWORD64)traces[i], 0, info);
     cspec_out_str(info->Name);
-    cspec_out_print();
+    _cspec_out_print(CONCOL_White);
   }
 #endif
 
