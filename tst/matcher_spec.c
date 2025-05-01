@@ -529,7 +529,7 @@ void cpystchr(void* out, TestStructChars ch, csSize size) {
 }
 
 # undef CSPEC_CUSTOM_TYPES_CPYFN
-# define CSPEC_CUSTOM_TYPES_CPYFN TestStructInts: cpystint, TestStructChars: cpystchr, 
+# define CSPEC_CUSTOM_TYPES_CPYFN TestStructInts: cpystint, TestStructChars: cpystchr,
 #endif
 
 # undef CSPEC_CUSTOM_TYPES
