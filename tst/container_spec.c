@@ -23,3 +23,54 @@
 */
 
 #include "cspec.h"
+
+describe(all) {
+
+  int arr[] = { 3, 5, 7, 9 };
+
+  context("compositing wiht basic matchers") {
+
+    it("checks for positivity") {
+      expect(arr to all(be_positive, c_array of int));
+    }
+
+    it("checks for negativity") {
+      expect(arr to all(not be_negative, c_array of int));
+    }
+
+    it("checks for even values") {
+      expect(arr to all(not be_even, c_array of int));
+    }
+
+    it("checks for odd values") {
+      expect(arr to all(be_odd, c_array of int));
+    }
+
+    it("checks for exactly true values") {
+      expect(arr to all(not be_true, c_array of int));
+    }
+
+    it("checks for false values") {
+      expect(arr to all(not be_false, c_array of int));
+    }
+
+    it("checks for truthiness (any non-0 value)") {
+      expect(arr to all(be_truthy, c_array of int));
+    }
+
+    it("checks for zero values") {
+      expect(arr to all(not be_zero, c_array of int));
+    }
+
+    it("checks for one") {
+      expect(arr to all(not be_one, c_array of int));
+    }
+
+  }
+
+}
+
+test_suite(tests_cspec_containers) {
+  test_group(all),
+  test_suite_end
+};

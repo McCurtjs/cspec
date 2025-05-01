@@ -31,6 +31,7 @@ extern TestSuite tests_cspec_out;
 extern TestSuite tests_cspec_log;
 extern TestSuite tests_cspec_mem;
 extern TestSuite tests_cspec_matchers;
+extern TestSuite tests_cspec_containers;
 extern TestSuite tests_cspec;
 
 // Main
@@ -56,6 +57,7 @@ int main(int argc, char* argv[]) {
     &tests_cspec_log,
     &tests_cspec_mem,
     &tests_cspec_matchers,
+    &tests_cspec_containers,
     &tests_cspec
   };
 

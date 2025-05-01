@@ -1075,7 +1075,7 @@ void cpyptr(void* dst, const void* src, csSize size);
   ) ( NAME, VALUE, sizeof((0,VALUE)) )                                                                                     /**/
 #
 #else /* CSPEC_USE_DEDUCTION == 0 */
-# define AUTO_DUP(NAME, VALUE) char NAME[sizeof(VALUE)]; cspec_memcpy(NAME, &VALUE, sizeof(VALUE))
+# define AUTO_DUP(NAME, VALUE) char NAME[sizeof(VALUE)]; cspec_memcpy(NAME, &(VALUE), sizeof(VALUE))
 # define _deduct_warn(EXP_STR) cspec_warn("output type deduction is disabled\nuse `"EXP_STR"` for value display");
 //# define _match_fn(A, B) FALSE; char _A[sizeof(A)]; char _B[sizeof(B)]; cspec_memcpy(_A, &(A), sizeof(A)); cspec_memcpy(_B, &(B), sizeof(B)); _test ^= cspec_memeq(_A, _B, sizeof(A), sizeof(B))
 # define _match_fn(A, B) FALSE; AUTO_DUP(_A, A); AUTO_DUP(_B, B); _test ^= cspec_memeq(_A, _B, sizeof(A), sizeof(B))
@@ -1208,7 +1208,7 @@ void cpyptr(void* dst, const void* src, csSize size);
 # define _expect_fn_mtch(S, F, n, M, B, u, _, P, ...)       AUTO_DUP(_R , (F P));     AUTO_DUP(_B    , (B));    _param_fn_def P       if (!(M(_R, _B)) ^ n) _cspec_fail_fn_match(F, M, B, P, u, n)
 # define _expect_fn_expr(S, F, x, B, P, ...)                AUTO_DUP(_R , (F P));     AUTO_DUP(_B    , (B));    _param_fn_def P       if (!(_R x _B))       _cspec_fail_fn_expr(F, x, B, P)
 # define _expect_fn_comp(S, F, M, P, ...)                   AUTO_DUP(_R , (F P));     csBool   _test = M(_R);   _param_fn_def P       if (!_test)           _cspec_fail_fn_comp(S, P)
-# define _expect_mtyp(S, A, n, F, B, u, _, T, ...)          T        _A , (A);        T        _B    = (B);                           if (!F(_A, _B) ^ n)   _cspec_fail_fmt("Expected "#A" to {}match "#B u(#F) "%n\nvalue 1: {}\nvalue 2: {}", "c str", n ? "not " : "",  #T, &_A, #T , &_B)
+# define _expect_mtyp(S, A, n, F, B, u, _, T, ...)          T        _A = (A);        T        _B    = (B);                           if (!F(_A, _B) ^ n)   _cspec_fail_fmt("Expected "#A" to {}match "#B u(#F) "%n\nvalue 1: {}\nvalue 2: {}", "c str", n ? "not " : "",  #T, &_A, #T , &_B)
 # define _expect_mtch(S, A, n, F, B, u, ...)                AUTO_DUP(_A , (A));       AUTO_DUP(_B    , (B));                          if (!(F(_A, _B)) ^ n) _cspec_fail_match(F, A, B, u, n)
 # define _expect_expr(S, A, x, B, ...)                      AUTO_DUP(_A , (A));       AUTO_DUP(_B    , (B));                          if (!(_A x _B))       _cspec_fail_t(A, x, B, _type_s(_A), _type_s(_B))
 # define _expect_comp(S, A, F, ...)                         AUTO_DUP(_R , (A));       csBool   _test = F(_R);                         if (!_test)           _cspec_fail_comp(S)
@@ -1218,7 +1218,7 @@ void cpyptr(void* dst, const void* src, csSize size);
 # if CSPEC_USE_DEDUCTION == 0
 #   define _expect_fn_mtyp(S, F, n, M, B, u, _, P, T, ...)  T _R = (F P); T _S = (B); csBool   _test = M(_R, _S);                     if (!_test ^ n)       _cspec_fail_fn_match(F, M, B, P, u, n, #T, &_R, #T, &_S)
 #   define _expect_fn_mtch(S, F, n, M, B, u, _, P, ...)     (void)B; _deduct_warn("expect("#F" to match("#B") given"#P", <type>)");                         cspec_warn("C11 required for 'match' matcher without providing explicit type");
-#   define _expect_mtyp(S, A, n, F, B, u, _, T, ...)        T _R = (A);   T _S = (B); T* _A = &_R; T* _B = &_S;                       if (!F((A), (B)) ^ n) _cspec_fail_fmt("Expected "#A" to {}match "#B u(#F) "%n\nvalue 1: {}\nvalue 2: {}", "c str", n ? "not " : "",  #T        , _A, #T        , _B)
+#   define _expect_mtyp(S, A, n, F, B, u, _, T, ...)        T _R = (A);   T _S = (B); csBool   _test = F(_R, _S);                     if (!_test ^ n) _cspec_fail_fmt("Expected "#A" to {}match "#B u(#F) "%n\nvalue 1: {}\nvalue 2: {}", "c str", n ? "not " : "",  #T, _A, #T, _B)
 #   define _expect_mtch(S, A, n, F, B, u, ...)                                        csBool   _test = F(A, B);                       if (!_test ^ n)       _cspec_fail_fmt("expected "#A" to {}match "#B u(#F), "c str", n ? "not " : "");
 #   define _expect_expr(S, A, x, B, ...)                    _deduct_warn("expect(lhs, "#x" , rhs, <type>)");                          if (!(A x B))         cspec_fail("expected "#A" "#x" "#B)
 #   define _expect_comp(S, A, F, ...)                                                 csBool   _test = F(A);                          if (!_test)           cspec_fail("expected "S)
@@ -1236,7 +1236,7 @@ void cpyptr(void* dst, const void* src, csSize size);
 #define _expect_type1(S, A, x, B, T, ...)                   T        _A = (A);        T        _B    = (B);                           if (!(_A x _B))       _cspec_fail_t(A, x, B, #T, #T);
 #define _expect_true(S, A, ...)                                                                                                       if (!(A))             cspec_fail("expected "S)
 #define _expect_select(S, U, V, W, X, Y, Z, C,_0,_1,_2,_3,_4, T, F, ...) do { _cspec_test_expcount(); _expect##F(S, U, V, W, X, Y, Z, C, T); } while(0)
-#define _expect_va(S, ...) _expect_select(S, __VA_ARGS__, _fn_mtyp, _fn_mtch, ><, _all, _fn_expr, _fn_comp, _mtyp, _mtch, _type2, _type1, _expr, _comp, _true)
+#define _expect_va(S, ...) _expect_select(S, __VA_ARGS__, _fn_mtyp, _fn_mtch, _all_type, _all, _fn_expr, _fn_comp, _mtyp, _mtch, _type2, _type1, _expr, _comp, _true)
 
 #define _all_comp_shared(A, B, C, T, EXPR, EXPECTED) csBool _tmp = _test; long long _index = 0; void* _pvalue = NULL; T _expected; T* C##_foreach_index(_iter_all, _loop_all, A) { _test = EXPR; if (!_test) { _index = _loop_all; _pvalue = _iter_all; EXPECTED break; } } _test ^= _tmp
 #define _all_comp(A, B, C, T, M)        _all_comp_shared(A, B, C, T, M(*_iter_all),         /* blank */       )

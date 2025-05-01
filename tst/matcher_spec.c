@@ -338,10 +338,10 @@ void cpystchr(void* out, TestStructChars ch, csSize size) {
 
 # undef CSPEC_CUSTOM_TYPES_CPYFN
 # define CSPEC_CUSTOM_TYPES_CPYFN TestStructInts: cpystint, TestStructChars: cpystchr, 
+#endif
 
 # undef CSPEC_CUSTOM_TYPES
 # define CSPEC_CUSTOM_TYPES default: "nope",
-#endif
 
 describe(matcher_match) {
 
@@ -357,7 +357,7 @@ describe(matcher_match) {
       int i = 123;
       char c = 123;
       expect(i to not match(c));
-      expect((char)i to match(c));
+      expect(i to match(c), int);
     }
 
     it("will match C-style arrays") {
@@ -365,8 +365,11 @@ describe(matcher_match) {
       char str2[] = "This is a string";
       char str3[] = "This is a string also";
 
+      void* ptr1 = str1;
+      void* ptr2 = str2;
+
       /* char* to char* will compare the pointer values, not what they point to */
-      expect(&str1 to not match(&str2));
+      expect(ptr1 to not match(ptr2));
 
       /* when comparing the arrays directly, it will do a memory compare on the data */
       expect(str1 to match(str2));
@@ -378,6 +381,10 @@ describe(matcher_match) {
       TestVec A = { 1, 2 }, B = { 1, 2 }, C = { 2, 2 };
       expect(A to match(B), TestVec);
       expect(A to not match(C), TestVec);
+    }
+
+    it("can match using literal values when given explicit types") {
+      expect(1 to not match(2), int);
     }
 
     it("will match values using an explicitly provided comparison function") {
@@ -393,7 +400,7 @@ describe(matcher_match) {
   context("when using C23 mode only (CSPEC_USE_DEDUCTION > 1)") {
 #if CSPEC_USE_DEDUCTION > 1
 
-
+    it("probably has some cases that match this situation - probably involving literal values");
 
 #else
 
@@ -472,6 +479,8 @@ describe(matcher_match) {
 }
 
 describe(matcher_function) {
+
+  it("should have function matcher specs - probably split between expression, function, and match");
 
 }
 

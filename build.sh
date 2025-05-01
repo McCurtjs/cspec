@@ -185,7 +185,7 @@ elif [ "$build_target" = "gcc" ]; then
     gcc -std=c99 -o build/gcc/test99.exe $sources_test $gcc_params
     success="$?"
     if [ "$success" == "0" ]; then
-      echo "C11"
+      echo "C99"
       ./build/gcc/test99.exe $args
       success="$?"
     fi
