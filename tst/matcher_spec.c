@@ -324,6 +324,10 @@ typedef struct TestStructChars {
   char c[12];
 } TestStructChars;
 
+typedef struct TestVec {
+  int x, y;
+} TestVec;
+
 #if CSPEC_USE_DEDUCTION == 1
 void cpystint(void* out, TestStructInts i, csSize size) {
   cspec_memcpy(out, &i, size);
@@ -341,7 +345,7 @@ void cpystchr(void* out, TestStructChars ch, csSize size) {
 
 describe(matcher_match) {
 
-  context("in situations that work in every mode") {
+  context("in situations that work in every mode (using variables)") {
 
     it("checks for binary equivalence of data") {
       int x = 12347, y = 12347, z = 75432;
@@ -353,26 +357,40 @@ describe(matcher_match) {
       int i = 123;
       char c = 123;
       expect(i to not match(c));
+      expect((char)i to match(c));
     }
 
     it("will match C-style arrays") {
       char str1[] = "This is a string";
       char str2[] = "This is a string";
       char str3[] = "This is a string also";
+
+      /* char* to char* will compare the pointer values, not what they point to */
+      expect(&str1 to not match(&str2));
+
+      /* when comparing the arrays directly, it will do a memory compare on the data */
       expect(str1 to match(str2));
       expect(str2 to not match(str3));
+      expect(str1 to match("This is a string"));
     }
-    /*
-    it("will match custom values/structs with a specified type") {
-      TestStructInts A = { .x = 1819043144, .y = 1752440943, .z = 6648421 };
-      TestStructInts B = { .x = 1819043144, .y = 1752440943, .z = 6648421 };
-      TestStructInts C = { .x = 1819043144, .y = 1752440943, .z = 6648421 };
-      expect(A to match(B), TestStructInts);
-    }*/
+
+    it("will match custom struct values with an explicitly given type") {
+      TestVec A = { 1, 2 }, B = { 1, 2 }, C = { 2, 2 };
+      expect(A to match(B), TestVec);
+      expect(A to not match(C), TestVec);
+    }
+
+    it("will match values using an explicitly provided comparison function") {
+      char* a = "Hello!";
+      char* b = "And Hello!";
+      char* c = b + 4;
+      expect(a, != , c, char*);
+      expect(a to match(c, cspec_streq));
+    }
 
   }
 
-  context("comparisons that only work in C23 (CSPEC_USE_DEDUCTION > 1)") {
+  context("when using C23 mode only (CSPEC_USE_DEDUCTION > 1)") {
 #if CSPEC_USE_DEDUCTION > 1
 
 
@@ -382,11 +400,17 @@ describe(matcher_match) {
 #endif
   }
 
-  context("comparisons that work in C11 and C23 but not C99 (CSPEC_USE_DEDUCTION > 0)") {
+  context("when using C11 or C23 (CSPEC_USE_DEDUCTION > 0)") {
 #if CSPEC_USE_DEDUCTION > 0
 
     it("can accept basic type literal values") {
       expect('a' to match(0x61));
+    }
+
+    it("will automatically use the string matcher for char* values") {
+      char* a = "Why, Hello!";
+      char* c = a + 5;
+      expect(c to match("Hello!"));
     }
 
 #else
@@ -394,7 +418,7 @@ describe(matcher_match) {
 #endif
   }
 
-  context("comparisons that work in C23 and C99 but oddly not in C11 without fudging (CSPEC_USE_DEDUCTION != 0)") {
+  context("when using C99 or C23 (but not C11) (CSPEC_USE_DEDUCTION != 1)") {
 #if CSPEC_USE_DEDUCTION != 1
 
     it("can match variables of arbitarry types") {
@@ -412,6 +436,21 @@ describe(matcher_match) {
       cspec_out_print();
     }
 #endif
+
+    context("when using C99 mode") {
+#if CSPEC_USE_DEDUCTION == 0
+      it("will -NOT- automatically use the string matcher for char* values") {
+        char* a = "Why, Hello!";
+        char* c = a + 5;
+        expect(c to not match("Hello!"));
+      }
+#else
+      expect(TRUE);
+
+      it("wouldn't be able to automatically apply the c-string matcher");
+#endif
+    }
+
   }
 
   it("is type agnostic by default and compares memory directly") {
