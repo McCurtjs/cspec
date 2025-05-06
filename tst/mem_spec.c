@@ -59,7 +59,7 @@ describe(cspec_malloc_and_free) {
     cspec_out_fmt("Blah: {}");
     cspec_out_int(buffer[0]);
     cspec_out_print();
-    expect(c_array(buffer, 35, char) to all_be( == , '!'));
+    expect(c_array(buffer, 35, char) to all_be( == , '!'), char);
 
     cspec_free(buffer);
   }
@@ -106,9 +106,9 @@ describe(cspec_malloc_and_free) {
     const csSize size = 32;
     char* subject = cspec_malloc(size);
     cspec_memset(subject, '!', size);
-    expect(c_array(subject, 32, char) to all_be( == , '!'));
+    expect(c_array(subject, 32, char) to all_be( == , '!'), char);
     cspec_free(subject);
-    expect(c_array(subject, 32, char) to all_be( != , '!'));
+    expect(c_array(subject, 32, char) to all_be( != , '!'), char);
   }
 
 }

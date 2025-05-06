@@ -664,6 +664,7 @@ static void _cspec_out_print(ConsoleColor color) {
 
 void cspec_out_print(void) {
   if (param.verbose >= V_NOTES) _cspec_out_print(CONCOL_White);
+  else cspec_out_clear();
 }
 #endif
 

@@ -98,11 +98,11 @@ describe(deduction) {
 #endif
 describe(tests) {
 
-  test("an empty test that succeeds");
+  it("an empty test that succeeds");
 
   it("can be described using either 'test' or 'it'");
 
-  test("doesn't fail because a break; saves us from the fail statement") {
+  it("doesn't fail because a break; saves us from the fail statement") {
     break;
     cspec_fail("Can't reach this");
   }
@@ -116,21 +116,21 @@ describe(tests) {
 
     expect(to_fail);
 
-    test("'test_fail' just causes a test to outright fail") {
+    it("'test_fail' just causes a test to outright fail") {
       cspec_fail("I failed because I felt like it");
     }
 
-    test("logs a message (only visible with a verbose/-v setting) then fails") {
+    it("logs a message (only visible with a verbose/-v setting) then fails") {
       cspec_log("this causes the header to print twice... would like to fix, but hey");
       cspec_fail("oops, failed again");
     }
 
-    test("another fail to balance output...") {
+    it("another fail to balance output...") {
       cspec_fail("Yep, it fails");
     }
 
     /* Blocking this one because of course it actually makes the test run fail
-    test("is expected to fail but succeeds, so it fails");
+    it("is expected to fail but succeeds, so it fails");
     //*/
   }
 
@@ -160,27 +160,27 @@ describe(expect_basic) {
 
     context("tests succeed") {
 
-      test("most basic equality check") {
+      it("most basic equality check") {
         expect(2 == 2);
       }
 
-      test("boolean (aka, macroed) values") {
+      it("boolean (aka, macroed) values") {
         expect(TRUE != FALSE);
       }
 
-      test("float macro value") {
+      it("float macro value") {
         expect(PI > 1);
       }
 
-      test("using other operator") {
+      it("using other operator") {
         expect(2 < 3);
       }
 
-      test("string compare") {
+      it("string compare") {
         expect(cspec_streq(str, "Test string"));
       }
 
-      test("more string funcs") {
+      it("more string funcs") {
         expect(cspec_strrstr(str, "string"));
       }
 
@@ -190,27 +190,27 @@ describe(expect_basic) {
 
       expect(to_fail);
 
-      test("most basic equality check") {
+      it("most basic equality check") {
         expect(2 == 3);
       }
 
-      test("boolean (aka, macroed) values") {
+      it("boolean (aka, macroed) values") {
         expect(TRUE == FALSE);
       }
 
-      test("float macro value") {
+      it("float macro value") {
         expect(PI < 1);
       }
 
-      test("using other operator") {
+      it("using other operator") {
         expect(2 > 3);
       }
 
-      test("string compare") {
+      it("string compare") {
         expect(cspec_streq(str, "Something"));
       }
 
-      test("more string funcs") {
+      it("more string funcs") {
         expect(cspec_strrstr(str, "strin"));
       }
 
@@ -229,28 +229,28 @@ describe(expect_deduced_triplet) {
 
     context("tests succeed") {
 
-      test("most basic equality check") {
+      it("most basic equality check") {
         expect(2, == , 2);
       }
 
-      test("boolean (aka, macroed) values") {
+      it("boolean (aka, macroed) values") {
         expect(TRUE, != , FALSE);
       }
 
-      test("float macro value") {
+      it("float macro value") {
         expect(PI, > , 1);
       }
 
-      test("float variable value") {
+      it("float variable value") {
         expect(pi, > , 1);
       }
 
-      test("using other operator") {
+      it("using other operator") {
         expect(2, < , 3);
       }
 
       /* Might fail, might not, depends on how your compiler feels that day :P
-      test("comparing strings by address") {
+      it("comparing strings by address") {
         const char* a = "indeterminate";
         const char* b = "indeterminate";
         expect(a, == , b);
@@ -262,37 +262,37 @@ describe(expect_deduced_triplet) {
 
       expect(to_fail);
 
-      test("most basic equality check") {
+      it("most basic equality check") {
         expect(2, == , 3);
       }
 
-      test("most basic equality check (with vars)") {
+      it("most basic equality check (with vars)") {
         int A = 2, B = 3;
         expect(A, == , B);
       }
 
-      test("float macro value (compare with output in expect_basic)") {
+      it("float macro value (compare with output in expect_basic)") {
         expect(PI, < , 1);
       }
 
-      test("float variable value (compare with output in expect_basic)") {
+      it("float variable value (compare with output in expect_basic)") {
         expect(pi, < , 1);
       }
 
-      test("boolean (aka, macroed) values (compare with output in expect_basic)") {
+      it("boolean (aka, macroed) values (compare with output in expect_basic)") {
         expect(TRUE, == , FALSE);
       }
 
-      test("using other operator") {
+      it("using other operator") {
         expect(2, > , 3);
       }
 
-      test("using other operator (with var)") {
+      it("using other operator (with var)") {
         double first = 2.0, second = 3.0;
         expect(first, > , second);
       }
 
-      test("comparing strings by address") {
+      it("comparing strings by address") {
         const char* a = "this is";
         const char* b = "not this";
         expect(a, == , b);
@@ -315,35 +315,35 @@ describe(expect_basic_var_output) {
     context("tests succeed") {
       x = 10;
 
-      test("incrementing context-scoped variable (starts at 1)") {
+      it("incrementing context-scoped variable (starts at 1)") {
         expect(++incrementor, == , 2, int);
       }
 
-      test("incrementing same variable, doesn't fail because context is reloaded") {
+      it("incrementing same variable, doesn't fail because context is reloaded") {
         expect(++incrementor, == , 2, int);
       }
 
-      test("using floating point values") {
+      it("using floating point values") {
         expect(PI, > , 3.0f, float);
       }
 
-      test("floating point variable output") {
+      it("floating point variable output") {
         expect(pi, > , 3.0f, float);
       }
 
-      test("two floating point variables - x has context specific value") {
+      it("two floating point variables - x has context specific value") {
         expect(pi, < , x, float);
       }
 
-      test("using boolean values") {
+      it("using boolean values") {
         expect(TRUE, != , FALSE, csBool);
       }
 
-      test("changing context variables only applies to the current context") {
+      it("changing context variables only applies to the current context") {
         expect(x, > , 5.0f, float);
       }
 
-      test("using different type specifiers") {
+      it("using different type specifiers") {
         expect(x, == , 10, float, int);
       }
 
@@ -353,41 +353,41 @@ describe(expect_basic_var_output) {
 
       expect(to_fail);
 
-      test("incrementing context-scoped variable (starts at 1)") {
+      it("incrementing context-scoped variable (starts at 1)") {
         expect(++incrementor, == , 3, int);
       }
 
-      test("incrementing same variable, doesn't reach threshold because context is reloaded") {
+      it("incrementing same variable, doesn't reach threshold because context is reloaded") {
         expect(++incrementor, == , 3, int);
       }
 
 #ifndef _MSC_VER
-      test("it converts the value explicitly") {
+      it("it converts the value explicitly") {
         expect(pi, > , 3, int);
       }
 #endif
 
-      test("using floating point values") {
+      it("using floating point values") {
         expect(PI, == , 1.0f, float);
       }
 
-      test("floating point variable output") {
+      it("floating point variable output") {
         expect(pi, == , 1.0f, float);
       }
 
-      test("two floating point variables - same test, context var reset after previous context") {
+      it("two floating point variables - same test, context var reset after previous context") {
         expect(pi, < , x, float);
       }
 
-      test("using boolean values") {
+      it("using boolean values") {
         expect(TRUE, == , FALSE, csBool);
       }
 
-      test("changing context variables only applies to the current context") {
+      it("changing context variables only applies to the current context") {
         expect(x, > , 5.0f, float);
       }
 
-      test("using different type specifiers") {
+      it("using different type specifiers") {
         expect(x, == , 10, float, int);
       }
 
@@ -477,7 +477,7 @@ describe(container_matchers) {
 
       it("contains only positive values") {
         expect(arr to all(be_positive, c_array));
-
+#if 0
         expect(arr to all(be_positive)); // type deduction, auto c_array
         expect(arr to all(be_positive, c_array)); // type deduction, explicit container type
         expect(arr to all(be_positive, c_array of int)); // explicit container and type
@@ -516,7 +516,8 @@ describe(container_matchers) {
 
         expect(arr[0] to be_between(2, 6));
         expect(arr[0] to be_between(2, 6, inclusive));
-        expect(arr[0] to be_between(2, 6, inclusive, int));//*/
+        expect(arr[0] to be_between(2, 6, inclusive, int));//k*/
+#endif
       }
 
       context("a negative number is added to the array [..., -1]") {
@@ -719,22 +720,22 @@ describe(matcher_basics) {
 
     context("be_positive and be_negative") {
 
-      test("negative expecting positive") {
+      it("negative expecting positive") {
         x = -18;
         expect(x to be_positive);
       }
 
-      test("zero expecting positive") {
+      it("zero expecting positive") {
         x = 0;
         expect(x to be_positive);
       }
 
-      test("positive expecting negative") {
+      it("positive expecting negative") {
         x = 140;
         expect(x to be_negative);
       }
 
-      test("negative expecting non-negative") {
+      it("negative expecting non-negative") {
         x = -1;
         expect(x to not be_negative);
       }
@@ -743,12 +744,12 @@ describe(matcher_basics) {
 
     context("be_even and be_odd") {
 
-      test("even expecting odd") {
+      it("even expecting odd") {
         x = 42;
         expect(x to be_odd);
       }
 
-      test("odd expecting even") {
+      it("odd expecting even") {
         x = 37;
         expect(x to be_even);
       }

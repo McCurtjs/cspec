@@ -26,46 +26,100 @@
 
 describe(matchers_basic) {
 
+  int test = 0;
+  csBool test_bool = FALSE;
+
   it("checks for positivity") {
     expect(5 to be_positive);
     expect(0 to not be_positive);
     expect(-5 to not be_positive);
+
+    test = 5;
+    expect(test to be_positive);
+    test = 0;
+    expect(test to not be_positive);
+    test = -5;
+    expect(test to not be_positive);
   }
 
   it("checks for negativity") {
     expect(-5 to be_negative);
     expect(0 to not be_negative);
     expect(5 to not be_negative);
+
+    test = -5;
+    expect(test to be_negative);
+    test = 0;
+    expect(test to not be_negative);
+    test = 5;
+    expect(test to not be_negative);
   }
 
   it("checks for even values") {
     expect(4 to be_even);
     expect(5 to not be_even);
     expect(0 to be_even);
+
+    test = 4;
+    expect(test to be_even);
+    test = 5;
+    expect(test to not be_even);
+    test = 0;
+    expect(test to be_even);
   }
 
   it("checks for odd values") {
     expect(4 to not be_odd);
     expect(5 to be_odd);
     expect(0 to not be_odd);
+
+    test = 4;
+    expect(test to not be_odd);
+    test = 5;
+    expect(test to be_odd);
+    test = 0;
+    expect(test to not be_odd);
   }
 
   it("checks for exactly true values") {
     expect(TRUE to be_true);
     expect(FALSE to not be_true);
     expect(7 to not be_true);
+
+    test_bool = TRUE;
+    expect(test_bool to be_true);
+    test_bool = FALSE;
+    expect(test_bool to not be_true);
+    test = 7;
+    expect(test to not be_true);
   }
 
   it("checks for false values") {
     expect(FALSE to be_false);
     expect(TRUE to not be_false);
     expect(0 to be_false);
+
+    test_bool = FALSE;
+    expect(test_bool to be_false);
+    test_bool = TRUE;
+    expect(test_bool to not be_false);
+    test = 0;
+    expect(test to be_false);
   }
 
   it("checks for truthiness (any non-0 value)") {
     expect(TRUE to be_truthy);
     expect(FALSE to not be_truthy);
     expect(7 to be_truthy);
+
+    test_bool = TRUE;
+    expect(test_bool to be_truthy);
+    test_bool = FALSE;
+    expect(test_bool to not be_truthy);
+    test = 7;
+    expect(test to be_truthy);
+    test = 0;
+    expect(test to not be_truthy);
   }
 
   it("checks for pointers to be null") {
@@ -77,12 +131,27 @@ describe(matchers_basic) {
   it("checks for zero values") {
     expect(0 to be_zero);
     expect(1 to not be_zero);
+
+    test = 0;
+    expect(test to be_zero);
+    test = 1;
+    expect(test to not be_zero);
   }
 
   it("checks for one") {
     expect(1 to be_one);
     expect(2 to not be_one);
     expect(0 to not be_one);
+    expect(-1 to not be_one);
+
+    test = 1;
+    expect(test to be_one);
+    test = 2;
+    expect(test to not be_one);
+    test = 0;
+    expect(test to not be_one);
+    test = -1;
+    expect(test to not be_one);
   }
 
 }
@@ -91,44 +160,99 @@ describe(matchers_basic_failed) {
 
   expect(to_fail);
 
-  it("checks for positivity") {
-    expect(1 to not be_positive);
+  context("It gives output using literal values") {
+
+    it("should expect 1 to NOT be_positive") {
+      expect(1 to not be_positive);
+    }
+
+    it("shuld expect 0 TO be_negative") {
+      expect(0 to be_negative);
+    }
+
+    it("should expect 4 to NOT be_even") {
+      expect(4 to not be_even);
+    }
+
+    it("should expect 5 to NOT be_odd") {
+      expect(5 to not be_odd);
+    }
+
+    it("should expect false TO be_true") {
+      expect(FALSE to be_true);
+    }
+
+    it("should expect true TO be_false") {
+      expect(TRUE to be_false);
+    }
+
+    it("should expect true to NOT be_truthy (any non-0 value)") {
+      expect(TRUE to not be_truthy);
+    }
+
+    it("should expect null to NOT be_null") {
+      expect(NULL to not be_null);
+    }
+
+    it("should expect 1 TO be_zero") {
+      expect(1 to be_zero);
+    }
+
+    it("shuld expect 0 TO be_one") {
+      expect(0 to be_one);
+    }
+
   }
 
-  it("checks for negativity") {
-    expect(0 to be_negative);
-  }
+  context("It prints output using variables (value printing in C11+)") {
 
-  it("checks for even values") {
-    expect(4 to not be_even);
-  }
+    int value = 1;
 
-  it("checks for odd values") {
-    expect(5 to not be_odd);
-  }
+    it("should expect 1 to NOT be_positive") {
+      expect(value to not be_positive);
+    }
 
-  it("checks for exactly true values") {
-    expect(FALSE to be_true);
-  }
+    it("shuld expect 1 TO be_negative") {
+      expect(value to be_negative);
+    }
 
-  it("checks for false values") {
-    expect(TRUE to be_false);
-  }
+    it("should expect 1 TO be_even") {
+      expect(value to be_even);
+    }
 
-  it("checks for truthiness (any non-0 value)") {
-    expect(TRUE to not be_truthy);
-  }
+    it("should expect 1 to NOT be_odd") {
+      expect(value to not be_odd);
+    }
 
-  it("checks for pointers to be null") {
-    expect(NULL to not be_null);
-  }
+    it("should expect false TO be_true") {
+      csBool bool_value = FALSE;
+      expect(bool_value to be_true);
+    }
 
-  it("checks for zero values") {
-    expect(1 to be_zero);
-  }
+    it("should expect true TO be_false") {
+      csBool bool_value = TRUE;
+      expect(bool_value to be_false);
+    }
 
-  it("checks for one") {
-    expect(0 to be_one);
+    it("should expect true to NOT be_truthy (any non-0 value)") {
+      value = 5;
+      expect(value to not be_truthy);
+    }
+
+    it("should expect null to NOT be_null") {
+      void* something = NULL;
+      expect(something to not be_null);
+    }
+
+    it("should expect 1 TO be_zero") {
+      expect(value to be_zero);
+    }
+
+    it("shuld expect 0 TO be_one") {
+      value = 0;
+      expect(value to be_one);
+    }
+
   }
 
 }
@@ -178,14 +302,6 @@ describe(matchers_compound) {
     }
 
     it("can take an explicit type parameter") {
-      expect(2 to be_between(1, 4, exclusive, csUint));
-      expect(1 to not be_between(1, 4, exclusive, csUint));
-      expect(4 to not be_between(1, 4, exclusive, csUint));
-      expect(0 to not be_between(1, 4, exclusive, csUint));
-      expect(5 to not be_between(1, 4, exclusive, csUint));
-    }
-
-    it("can take two explicit type parameters") {
       expect(2 to be_between(1, 4, exclusive, csUint));
       expect(1 to not be_between(1, 4, exclusive, csUint));
       expect(4 to not be_between(1, 4, exclusive, csUint));
@@ -256,60 +372,136 @@ describe(matchers_compound_failed) {
 
   context("when checking for values to be_between the extents of a given range") {
 
-    it("does a basic check with default-inclusive bounds") {
-      expect(0 to be_between(1, 4));
+    context("when checking against literal values") {
+
+      it("does a basic check with default-inclusive bounds") {
+        expect(0 to be_between(1, 4));
+      }
+
+      it("does a basic check with explicitly inclusive bounds") {
+        expect(5 to be_between(1, 4, inclusive));
+      }
+
+      it("does a check with exclusive bounds") {
+        expect(1 to be_between(1, 4, exclusive));
+      }
+
+      it("does a check with exclusive-inclusive bounds") {
+        expect(1 to be_between(1, 4, exclusive_start));
+      }
+
+      it("does a check with inclusive-exclusive bounds") {
+        expect(4 to be_between(1, 4, exclusive));
+      }
+
+      it("can take an explicit type parameter") {
+        expect(2 to not be_between(1, 4, exclusive, csUint));
+      }
+
     }
 
-    it("does a basic check with explicitly inclusive bounds") {
-      expect(5 to be_between(1, 4, inclusive));
-    }
+    context("when checking against variable inputs (value printing in C11+)") {
 
-    it("does a check with exclusive bounds") {
-      expect(1 to be_between(1, 4, exclusive));
-    }
+      int value = 0;
 
-    it("does a check with exclusive-inclusive bounds") {
-      expect(1 to be_between(1, 4, exclusive_start));
-    }
+      it("should expect 0 TO be_between(1, 4)") {
+        expect(value to be_between(1, 4));
+      }
 
-    it("does a check with inclusive-exclusive bounds") {
-      expect(4 to be_between(1, 4, exclusive));
-    }
+      it("should expect 5 TO be_between(1, 4, inclusive)") {
+        value = 5;
+        expect(value to be_between(1, 4, inclusive));
+      }
 
-    it("can take an explicit type parameter") {
-      expect(2 to not be_between(1, 4, exclusive, csUint));
-    }
+      it("should expect 1 TO be_between(1, 4, exclusive)") {
+        value = 1;
+        expect(value to be_between(1, 4, exclusive));
+      }
 
-    it("can take two explicit type parameters") {
-      expect(2 to not be_between(1, 4, exclusive, csUint));
+      it("should expect 1 TO be_between(1, 4, exclusive_start)") {
+        value = 1;
+        expect(value to be_between(1, 4, exclusive_start));
+      }
+
+      it("should expect 4 TO be_between(1, 4, exclusive_end)") {
+        value = 4;
+        expect(value to be_between(1, 4, exclusive_end));
+      }
+
+      it("should expect 2 to NOT be_between(1, 4, exclusive, csUint)") {
+        value = 2;
+        expect(value to not be_between(1, 4, exclusive, csUint));
+      }
+
     }
 
   }
 
   context("when checking for values to be_within a distnace of a given value") {
 
-    it("does a basic check with default-inclusive bounds") {
-      expect(5 to not be_within(3 of 7));
+    context("when checking against literal values") {
+
+      it("does a basic check with default-inclusive bounds") {
+        expect(5 to not be_within(3 of 7));
+      }
+
+      it("does a check with explicitly inclusive bounds") {
+        expect(2 to be_within(0 of 7, inclusive));
+      }
+
+      it("does a check with exclusive bounds") {
+        expect(7 to be_within(0 of 7, exclusive));
+      }
+
+      it("can take an explicit type parameter") {
+        expect(6 to not be_within(3 of 7, exclusive, csUint));
+      }
+
     }
 
-    it("does a check with explicitly inclusive bounds") {
-      expect(2 to be_within(0 of 7, inclusive));
-    }
+    context("when checking against variable inputs (value printing in C11+)") {
 
-    it("does a check with exclusive bounds") {
-      expect(7 to be_within(0 of 7, exclusive));
-    }
+      it("should expect 5 to NOT be_within(3 of 7)") {
+        int value = 5;
+        expect(value to not be_within(3 of 7));
+      }
 
-    it("can take an explicit type parameter") {
-      expect(6 to not be_within(3 of 7, exclusive, csUint));
+      it("should expect 2 TO be_within(0 of 7, inclusive)") {
+        int value = 2;
+        expect(value to be_within(0 of 7, inclusive));
+      }
+
+      it("should expect 7 TO be_within(0 of 7, exclusive)") {
+        int value = 7;
+        expect(value to be_within(0 of 7, exclusive));
+      }
+
+      it("should expect 6 to NOT be_within(3 of 7, exclusive, csUint)") {
+        int value = 6;
+        expect(value to not be_within(3 of 7, exclusive, csUint));
+      }
+
     }
 
   }
 
   context("when checking for floating point values to be_about a given value") {
 
-    it("does a basic check for approximate equivalence") {
-      expect(2.00000001 to not be_about(2.0));
+    context("when checking against literal values") {
+
+      it("does a basic check for approximate equivalence") {
+        expect(2.00000001 to not be_about(2.0));
+      }
+
+    }
+
+    context("when chceking against variable inputs (value printing in C11+)") {
+
+      it("should expect value to NOT be_about 2.0") {
+        float value = 2.00000001f;
+        expect(value to not be_about(2.0));
+      }
+
     }
 
   }
@@ -341,7 +533,7 @@ void cpystchr(void* out, TestStructChars ch, csSize size) {
 #endif
 
 # undef CSPEC_CUSTOM_TYPES
-# define CSPEC_CUSTOM_TYPES default: "nope",
+# define CSPEC_CUSTOM_TYPES default: "unknown",
 
 describe(matcher_match) {
 
@@ -421,7 +613,9 @@ describe(matcher_match) {
     }
 
 #else
+    expect(TRUE);
     it("cannot accept literal values of basic types");
+    it("can only use the default matching function (memeq)");
 #endif
   }
 
@@ -429,7 +623,17 @@ describe(matcher_match) {
 #if CSPEC_USE_DEDUCTION != 1
 
     it("can match variables of arbitarry types") {
+      int i = 1234;
+      float f = 12.34f;
+      expect(i to not match(f));
 
+      char c = 255;
+      double d = 3.141592653589;
+      expect(c to not match(d));
+
+      //csUint u = *(csUint*)&f;
+      csUint u = 1095069860u;
+      expect(u to match(f));
     }
 
 #else
@@ -443,20 +647,19 @@ describe(matcher_match) {
       cspec_out_print();
     }
 #endif
+  }
 
-    context("when using C99 mode") {
+  context("when using C99 mode") {
 #if CSPEC_USE_DEDUCTION == 0
-      it("will -NOT- automatically use the string matcher for char* values") {
-        char* a = "Why, Hello!";
-        char* c = a + 5;
-        expect(c to not match("Hello!"));
-      }
-#else
-      expect(TRUE);
-
-      it("wouldn't be able to automatically apply the c-string matcher");
-#endif
+    it("will -NOT- automatically use the string matcher for char* values") {
+      char* a = "Why, Hello!";
+      char* c = a + 5;
+      expect(c to not match("Hello!"));
     }
+#else
+    expect(TRUE);
+    it("wouldn't be able to automatically apply the c-string matcher");
+#endif
 
   }
 
