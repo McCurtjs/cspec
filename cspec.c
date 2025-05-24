@@ -399,6 +399,10 @@ void cpyptr(void* dst, const void* ptr, csSize size) {
   cspec_memcpy(dst, &ptr, size);
 }
 
+csBool dumb(void* a, void* b) {
+
+}
+
 csBool _cspec_streq(
   const char* const * A, const char* const * B, csSize unused0, csSize unused1
 ) {
