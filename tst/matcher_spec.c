@@ -560,7 +560,7 @@ describe(matcher_match) {
       void* ptr1 = str1;
       void* ptr2 = str2;
 
-      /* char* to char* will compare the pointer values, not what they point to */
+      /* void* to void* will compare the pointer values, not what they point to */
       expect(ptr1 to not match(ptr2));
 
       /* when comparing the arrays directly, it will do a memory compare on the data */
@@ -568,9 +568,15 @@ describe(matcher_match) {
       expect(str2 to not match(str3));
       expect(str1 to match("This is a string"));
 
-      //typeof(c_array(str3 + 10, 11, char)) hwat;
+      /* array is treated differently than pointer */
+      expect(ptr1 to not match(str1));
+    }
 
-      expect(c_array(str3 + 10, 11, char) to match("string also"));
+    it("will match custom struct values by memory size") {
+      TestVec A = { 1, 2 }, B = { 1, 2 }, C = { 2, 2 };
+      expect(A to match(B));
+      expect(A to match(B));
+      expect(A to not match(C));
     }
 
     it("will match custom struct values with an explicitly given type") {
@@ -578,93 +584,9 @@ describe(matcher_match) {
       expect(A to match(B), TestVec);
       expect(A to match(B), TestVec);
       expect(A to not match(C), TestVec);
-    }
 
-    it("does something with arrays") {
-      //*
-      int box1 = 5;
-      int box2 = 5;
-      /*/
-      int box1[] = { 1, 2, 3 };
-      int box2[] = { 1, 2, 3 };
-
-      //expect(box1 to match(ptr));
-      //*/
-
-      //int* ptr1 = box1;
-      //int* ptr2 = box2;
-      //void* ptr3 = &box1;
-      //void* ptr4 = (&box1)[0];
-      //void* ptr5 = &(int*)((&box1)[0]);
-
-      csByte to_data[sizeof((0,box1))];
-      csByte to_dat2[sizeof((0,box2))];
-
-      cpyptr(&to_data, &box1, sizeof((0,box1)));
-      cpyptr(&to_dat2, &box2, sizeof((0,box2)));
-
-      void* vp1 = &box1;
-      void* vp2 = &box2;
-
-      csBool qwer = cspec_memeq(to_data, to_dat2, sizeof(to_data), sizeof(to_dat2));
-      csBool uiop = cspec_memeq(&box1, &box2, sizeof(box1), sizeof(box2));
-      csBool asdf = cspec_memeq(&vp1, &vp2, sizeof(vp1), sizeof(vp2));
-
-      do {
-        _cspec_test_expcount();
-        csBool _test = csFalse;
-        const void* _A = &box1;
-        const void* _B = &box2;
-        _test ^= cspec_memeq(_A, _B, sizeof(box1), sizeof(box2));
-        if (!_test ^ !csFalse) do {
-          _cspec_log_fmt_exp(2, 613, "expected ""box1"" to {}match ""box2" "", "c str", !csFalse ? "not " : "", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0); return;
-        } while (0);;
-      } while (0);
-
-      expect(qwer == uiop && qwer == asdf);
-
-      //cspec_memcmp(&box1, &ptr, sizeof(&box1));
-
-
-      //ptr3 = ptr4;
-      //ptr5 = NULL;
-
-      /*
-
-      typeof(box1) test1;
-      typeof((0, &box1)) test1b;
-      typeof((0, (&box1)[0])) test1c;
-      typeof((0, (&box1))[0]) test1d;
-      typeof(((int*)(0, (&box1)))[0]) test1d;
-      typeof(&(((int*)(0, (&box1)))[0])) test1e;
-      typeof(&(  ( (0,&box1) )[0]  )) test1f;
-      typeof(&box1) test2;
-      typeof((0, &box1)) test3;
-      typeof(*(&box1)) test3b;
-      typeof((&box1)[0]) test4;
-
-      typeof(&ptr1) test6;
-
-
-      typeof(&((&box1)[0])) test;
-      //*/
-
-      /*
-      expect(ptr1 to not match(ptr2));
-      expect(box1 to all_match(box2[n]));
-      do {
-        _cspec_test_expcount();
-        csBool _test = csFalse;
-        const void* _A = &box1 == (const void*)(&box1)[0] ? &box1 : NULL;
-        const void* _B = &box2;
-        cpyptr(&_A, &(*(&box1)), sizeof(void*));
-        cpyptr(&_B, &box2, sizeof(void*));
-        _test ^= cspec_memeq(_A, _B, sizeof(box1), sizeof(box2));
-        if (!_test ^ csFalse) do {
-          _cspec_log_fmt_exp(2, 592, "expected ""box1"" to {}match ""box2" "", "c str", csFalse ? "not " : "", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0); return;
-        } while (0);;
-      } while (0);
-      //*/
+      /* Note: inline objects like this won't work due to variadic selection */
+      /* expect(A to match((TestVec) { 1, 2 }), TestVec); */
     }
 
     it("can match using literal values when given explicit types") {
@@ -679,40 +601,10 @@ describe(matcher_match) {
       expect(a to match(c, cspec_streq));
     }
 
-  }
-
-  context("when using C23 mode only (CSPEC_USE_DEDUCTION > 1)") {
-#if CSPEC_USE_DEDUCTION > 1
-
-    it("probably has some cases that match this situation - probably involving literal values");
-
-#else
-
-#endif
-  }
-
-  context("when using C11 or C23 (CSPEC_USE_DEDUCTION > 0)") {
-#if CSPEC_USE_DEDUCTION > 0
-
-    it("can accept basic type literal values") {
-      expect('a' to match(0x61));
+    it("will decay arrays to pointers when passing to provided comparison fn") {
+      char* str = "Hello!";
+      expect(str to match("Hello!", cspec_streq));
     }
-
-    it("will automatically use the string matcher for char* values") {
-      char* a = "Why, Hello!";
-      char* c = a + 5;
-      expect(c to match("Hello!"));
-    }
-
-#else
-    expect(TRUE);
-    it("cannot accept literal values of basic types");
-    it("can only use the default matching function (memeq)");
-#endif
-  }
-
-  context("when using C99 or C23 (but not C11) (CSPEC_USE_DEDUCTION != 1)") {
-#if CSPEC_USE_DEDUCTION != 1
 
     it("can match variables of arbitarry types") {
       int i = 1234;
@@ -728,16 +620,35 @@ describe(matcher_match) {
       expect(u to match(f));
     }
 
+  }
+
+  context("when using C11 or later (CSPEC_USE_DEDUCTION > 0)") {
+#if CSPEC_USE_DEDUCTION > 0
+
+    it("can accept basic type literal values") {
+      expect('a' to match(0x61));
+    }
+
+    it("will automatically use the string matcher for char* values") {
+      char* a = "Why, Hello!";
+      char* c = a + 5;
+      expect(c to match("Hello!"));
+    }
+
 #else
     expect(TRUE);
+    it("cannot accept literal values of basic types");
+    it("cannot deduce a different comparison function other than (memeq)");
+#endif
+  }
 
-    it("cannot match variables of arbitrary types") {
-      cspec_log_start();
-      cspec_out_str("You can match structs by memory by defining the following before the match expectation:%n\n");
-      cspec_out_str("- CSPEC_CUSTOM_TYPES\n");
-      cspec_out_str("- CSPEC_CUSTOM_TYPES_CPYFN%n");
-      cspec_out_print();
-    }
+  context("when using C23 mode only (CSPEC_USE_DEDUCTION > 1)") {
+#if CSPEC_USE_DEDUCTION > 1
+
+    it("probably has some cases that match this situation - probably involving literal values");
+
+#else
+
 #endif
   }
 
