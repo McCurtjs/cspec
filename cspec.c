@@ -400,11 +400,11 @@ void cpyptr(void* dst, const void* ptr, csSize size) {
 }
 
 csBool _cspec_streq(
-  const char* const * A, const char* const * B, csSize unused0, csSize unused1
+  const char* A, const char* B, csSize unused0, csSize unused1
 ) {
   (void)unused0;
   (void)unused1;
-  return cspec_streq(*A, *B);
+  return cspec_streq(A, B);
 }
 
 /*----------------------------------------------------------------------------*\

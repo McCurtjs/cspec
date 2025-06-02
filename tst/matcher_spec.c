@@ -553,35 +553,31 @@ describe(matcher_match) {
     }
 
     it("will match C-style arrays") {
-      char str1[] = "This is a string";
-      char str2[] = "This is a string";
-      char str3[] = "This is a string also";
+      int box1[] = { 1, 2, 3 };
+      int box2[] = { 1, 2, 3 };
+      int box3[] = { 1, 2, 3, 4 };
 
-      void* ptr1 = str1;
-      void* ptr2 = str2;
+      int* p1 = box1;
+      int* p2 = box2;
 
-      /* void* to void* will compare the pointer values, not what they point to */
-      expect(ptr1 to not match(ptr2));
+      /* pointers will compare the pointer values, not what they point to  */
+      /* this can be overridden in C11+ to use custom comparison functions */
+      expect(p1 to not match(p2));
+      expect(p1 to not match(box1));
 
-      /* when comparing the arrays directly, it will do a memory compare on the data */
-      expect(str1 to match(str2));
-      expect(str2 to not match(str3));
-      expect(str1 to match("This is a string"));
-
-      /* array is treated differently than pointer */
-      expect(ptr1 to not match(str1));
+      /* comparing arrays directly will compare the actual memory */
+      expect(box1 to match(box2));
+      expect(box2 to not match(box3));
     }
 
     it("will match custom struct values by memory size") {
       TestVec A = { 1, 2 }, B = { 1, 2 }, C = { 2, 2 };
-      expect(A to match(B));
       expect(A to match(B));
       expect(A to not match(C));
     }
 
     it("will match custom struct values with an explicitly given type") {
       TestVec A = { 1, 2 }, B = { 1, 2 }, C = { 2, 2 };
-      expect(A to match(B), TestVec);
       expect(A to match(B), TestVec);
       expect(A to not match(C), TestVec);
 
@@ -620,14 +616,22 @@ describe(matcher_match) {
       expect(u to match(f));
     }
 
+    it("is type agnostic by default and compares memory directly") {
+      TestStructInts A = { .x = 1819043144, .y = 1752440943, .z = 6648421 };
+      TestStructChars B = { .c = "Hello there" };
+      expect(A to match(B));
+    }
+
+    it("is type agnostic for arrays and compares memory directly") {
+      int arr1[] = { 1819043144, 1752440943, 6648421 };
+      char arr2[] = "Hello there";
+      expect(arr1 to match(arr2));
+    }
+
   }
 
   context("when using C11 or later (CSPEC_USE_DEDUCTION > 0)") {
 #if CSPEC_USE_DEDUCTION > 0
-
-    it("can accept basic type literal values") {
-      expect('a' to match(0x61));
-    }
 
     it("will automatically use the string matcher for char* values") {
       char* a = "Why, Hello!";
@@ -635,51 +639,154 @@ describe(matcher_match) {
       expect(c to match("Hello!"));
     }
 
+    it("will match C-style char arrays as strings") {
+      char str[] = "Well, hello!";
+      char st2[] = "Well, hello!";
+      char* ptr = str;
+      char* offset = str + 6;
+
+      expect(str to match(st2));
+
+      /* match function used is based on first argument, so test both ways */
+      expect(str to match(ptr));
+      expect(ptr to match(str));
+
+      expect(str to match("Well, hello!"));
+      expect(offset to match("hello!"));
+    }
+
 #else
-    expect(TRUE);
-    it("cannot accept literal values of basic types");
-    it("cannot deduce a different comparison function other than (memeq)");
+
+    it("will -NOT- automatically use the string matcher for char* values") {
+      char* a = "Why, Hello!";
+      char* c = a + 5;
+      expect(c to not match("Hello!"));
+    }
+
+    it("will only match C-style char arrays as arrays (no strcmp for char*)") {
+      char str1[] = "Well, hello!";
+      char str2[] = "Well, hello!";
+      char* ptr = str1;
+      char* offset = str1 + 6;
+
+      expect(str1 to match(str2));
+
+      expect(str1 to not match(ptr));
+      expect(ptr to not match(str1));
+
+      expect(str1 to match("Well, hello!"));
+      expect(offset to not match("hello!"));
+    }
+
 #endif
   }
 
   context("when using C23 mode only (CSPEC_USE_DEDUCTION > 1)") {
 #if CSPEC_USE_DEDUCTION > 1
 
+    it("can accept basic type literal values") {
+      expect('a' to match(0x61));
+    }
+
     it("probably has some cases that match this situation - probably involving literal values");
 
 #else
-
-#endif
-  }
-
-  context("when using C99 mode") {
-#if CSPEC_USE_DEDUCTION == 0
-    it("will -NOT- automatically use the string matcher for char* values") {
-      char* a = "Why, Hello!";
-      char* c = a + 5;
-      expect(c to not match("Hello!"));
-    }
-#else
     expect(TRUE);
-    it("wouldn't be able to automatically apply the c-string matcher");
+    it("cannot accept literal values of basic types");
 #endif
-
   }
 
-  it("is type agnostic by default and compares memory directly") {
-    TestStructInts A = { .x = 1819043144, .y = 1752440943, .z = 6648421 };
-    TestStructChars B = { .c = "Hello there" };
-    //cpyptr(&C, &(void*){ &A }, sizeof(C));
-    expect(A to match(B));
-    //expect(1 to match(2));
+}
 
-    //char cc[] = (char[sizeof(TestStructInts)])A;
+describe(matcher_match_failed) {
 
+  expect(to_fail);
 
-    //int arr1[] = { 1819043144, 1752440943, 6648421 };
-    //char arr2[] = "Hello there";
-    //expect(arr1 to match(arr2, cspec_streq));
-    //expect(arr1 to match(arr2));
+  context("in situations that work in every mode (using variables)") {
+
+    it("should expect x to NOT match y, both 12347") {
+      int x = 12347, y = 12347;
+      expect(x to not match(y));
+    }
+
+    it("should expect x TO match y, with 12347 and 75432") {
+      int x = 12347, y = 75432;
+      expect(x to match(y));
+    }
+
+    it("should expect i TO match c, [int] vs [char]") {
+      int i = 123; char c = 123;
+      expect(i to match(c));
+    }
+
+    it("should expect i to NOT match c, coalescing both to [int]") {
+      int i = 123; char c = 123;
+      expect(i to not match(c), int);
+    }
+
+    context("when working with C-style arrays") {
+      int box1[] = { 1, 2, 3 };
+      int box2[] = { 1, 2, 3 };
+      int box3[] = { 1, 2, 3, 4 };
+
+      it("should expect p1 TO match p2") {
+        int* p1 = box1, * p2 = box2;
+        expect(p1 to match(p2));
+      }
+
+      it("should expect box1 TO match p1") {
+        int* p1 = box1;
+        expect(p1 to match(box1));
+      }
+
+      it("should expect box2 to NOT match box2") {
+        expect(box1 to not match(box2));
+      }
+
+      it("should expect box2 TO match box3") {
+        expect(box2 to match(box3));
+      }
+
+      it("should expect box2 TO match box3 (forced pointer decay)") {
+        expect(box2 to match(box3), int*);
+      }
+
+    }
+
+    context("when matching struct values") {
+      TestVec A = { 1, 2 }, B = { 1, 2 }, C = { 2, 2 };
+
+      it("should expect A to NOT match B") {
+        expect(A to not match(B));
+      }
+
+      it("should expect A TO match C") {
+        expect(A to match(C));
+      }
+
+      it("should expect A to NOT match B with an explicit type") {
+        expect(A to not match(B), TestVec);
+      }
+
+      it("should expect A TO match C with an explicit type") {
+        expect(A to match(C), TestVec);
+      }
+
+    }
+
+    it("should expect 1 TO match 2 using literal values and a provided type int") {
+      expect(1 to match(2), int);
+    }
+
+    it("should expect 1 to NOT match 1 using literal values and a provided type char") {
+      expect(1 to not match(1), char);
+    }
+
+    it("will match values using an explicitly provided comparison function") {
+      //char* a = "Hello!";
+      //expect(a to not match("Hello!", cspec_streq));
+    }
+
   }
 
 }
@@ -696,6 +803,7 @@ test_suite(tests_cspec_matchers) {
   test_group(matchers_compound),
   test_group(matchers_compound_failed),
   test_group(matcher_match),
+  test_group(matcher_match_failed),
   test_group(matcher_function),
   test_suite_end
 };
