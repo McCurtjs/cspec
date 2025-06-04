@@ -249,6 +249,11 @@ describe(expect_deduced_triplet) {
         expect(2, < , 3);
       }
 
+      it("compares c string pointer equality") {
+        char str[] = "String";
+        expect(str, != , NULL);
+      }
+
       /* Might fail, might not, depends on how your compiler feels that day :P
       it("comparing strings by address") {
         const char* a = "indeterminate";
@@ -290,6 +295,11 @@ describe(expect_deduced_triplet) {
       it("using other operator (with var)") {
         double first = 2.0, second = 3.0;
         expect(first, > , second);
+      }
+
+      it("compares c string pointer equality") {
+        char str[] = "String";
+        expect(str, == , NULL);
       }
 
       it("comparing strings by address") {
@@ -389,6 +399,17 @@ describe(expect_basic_var_output) {
 
       it("using different type specifiers") {
         expect(x, == , 10, float, int);
+      }
+
+      it("compares c string pointer equality") {
+        char str[] = "String";
+        expect(str, == , "String", char*);
+      }
+
+      it("comparing strings by address") {
+        const char* a = "this is";
+        const char* b = "not this";
+        expect(a, == , b, const char*);
       }
 
     }

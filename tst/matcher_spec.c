@@ -782,9 +782,24 @@ describe(matcher_match_failed) {
       expect(1 to not match(1), char);
     }
 
-    it("will match values using an explicitly provided comparison function") {
-      //char* a = "Hello!";
-      //expect(a to not match("Hello!", cspec_streq));
+    it("should expect str TO match 'Hi!' using cspec_streq (using array parameter)") {
+      char str[] = "Hello!";
+      expect(str to match("Hi!", cspec_streq));
+    }
+
+    it("should expect str TO match 'Hi!' using cspec_streq (using array parameter) (explicit type)") {
+      char str[] = "Hello!";
+      expect(str to match("Hi!", cspec_streq), char*);
+    }
+
+    it("should expect str to NOT match 'Hello!' using cspec_streq") {
+      char* str = "Hello!";
+      expect(str to not match("Hello!", cspec_streq));
+    }
+
+    it("should expect str to NOT match 'Hello!' using cspec_streq (explicit type)") {
+      char* str = "Hello!";
+      expect(str to not match("Hello!", cspec_streq), char*);
     }
 
   }

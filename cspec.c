@@ -937,7 +937,11 @@ static csBool _cspec_log_param(const char* typ_N, const void* N) {
   ) {
     cspec_out_ptr(N);
     cspec_out_str(": \"");
+#if CSPEC_USE_DEDUCTION == 0
     cspec_out_str(*(const char**)N);
+#else
+    cspec_out_str((const char*) N);
+#endif
     cspec_out_ch('"');
   }
   else if (cspec_streq(typ_N, "c str")) {
