@@ -352,6 +352,21 @@ describe(out_fmt) {
     expected = "      This new string has\n      formatted newlines";
   }
 
+  it("tests the new output format function") {
+
+    int a = 1;
+
+    expect(a, == , 2);
+    expect(1 to be_positive);
+
+    _cspec_log_fmt2(2, 0, "The char {}\nthe int {}\nthe float {}\nand the string {}.",
+      (&(csFmtVar) { 1, "char", & (char){ 'a' } }),
+      (&(csFmtVar) { 4, "int", & (int){ 5492 } }),
+      (&(csFmtVar) { 4, "float", & (float){ 12.34f } }),
+      (&(csFmtVar) { sizeof(void*), "char*", "Sup!" })
+    );
+  }
+
   after{
     expect_output_to_match_expected(expected);
   }

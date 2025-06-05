@@ -898,13 +898,13 @@ void _cspec_log(int status, int line, const void* mem, const char* message) {
   if (param.padding) _cspec_out_print(0);
 }
 
-static csBool _cspec_log_param(const char* typ_N, const void* N) {
+static csBool _cspec_log_param2(const csFmtVar* arg) {
 
-  if (!typ_N) {
+  if (!arg) {
     return FALSE;
   }
 
-  if (!N) {
+  if (!arg->value) {
     cspec_out_str("<NULL>");
     return FALSE;
   }
@@ -914,7 +914,7 @@ static csBool _cspec_log_param(const char* typ_N, const void* N) {
   if (resolve_user_types) {
     const char* old_fmt = test.out.fmt;
     test.out.fmt = NULL;
-    written = resolve_user_types(&typ_N, N);
+    written = resolve_user_types((const char**)&arg->type, arg->value);
     test.out.fmt = old_fmt;
 
     if (written) {
@@ -923,6 +923,9 @@ static csBool _cspec_log_param(const char* typ_N, const void* N) {
 
     return written;
   }
+
+  const char* typ_N = arg->type;
+  const void* N = arg->value;
 
   csBool is_size_t = cspec_streq(typ_N, "size_t")
                   || cspec_streq(typ_N, "csSize");
@@ -1042,6 +1045,12 @@ static csBool _cspec_log_param(const char* typ_N, const void* N) {
   ) {
     cspec_out_bool(*(csBool*)N);
   }
+  else if (arg->size != 0) {
+    for (csSize i = 0; i < arg->size; ++i) {
+      cspec_out_hex(((csByte*)arg->value)[i]);
+      cspec_out_ch(' ');
+    }
+  }
   else {
     cspec_out_str("<unknown_type>");
     written = FALSE;
@@ -1060,6 +1069,36 @@ static csBool _cspec_log_param(const char* typ_N, const void* N) {
   cspec_out_fmt_end();
 
   return written;
+}
+
+static csBool _cspec_log_param(const char* typ_N, const void* N) {
+  return _cspec_log_param2(&(csFmtVar) { 0, typ_N, N });
+}
+
+void _cspec_log_fmt_exp2(
+  int status, int line, const char* fmt, csFmtVar* args[10]
+) {
+  if (!fmt) return;
+
+  csUint old_stop = _cspec_log_fmt_start(status, line);
+
+  if (old_stop == 0) return;
+
+  cspec_out_fmt(fmt);
+
+  for (int i = 0; i < 10; ++i) {
+    if (!args[i]) break;
+    _cspec_log_param2(args[i]);
+  }
+
+  if (status == S_WARNING) {
+    ConsoleColor color = test.pass.warned ? CONCOL_Yellow : CONCOL_bYellow;
+    _cspec_out_print(color);
+  } else {
+    _cspec_out_print(CONCOL_White);
+  }
+
+  cspec_out_print();
 }
 
 void _cspec_log_fmt_exp(
