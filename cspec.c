@@ -498,6 +498,16 @@ static void _cspec_out_fmt_flush() {
   }
 }
 
+static csUint _cspec_out_set_stop() {
+  csUint old_stop = test.out.tabstop;
+  csUint i = test.out.index;
+  while (i --> 0) {
+    if (test.out.buffer[i] == '\n') break;
+  }
+  test.out.tabstop = test.out.index - (i + 1);
+  return old_stop;
+}
+
 const char* cspec_out_read(void) {
   _cspec_out_fmt_flush();
   test.out.buffer[test.out.index] = '\0';
@@ -1046,10 +1056,19 @@ static csBool _cspec_log_param2(const csFmtVar* arg) {
     cspec_out_bool(*(csBool*)N);
   }
   else if (arg->size != 0) {
-    for (csSize i = 0; i < arg->size; ++i) {
+    /* default mode of printing for unknown types with a given size */
+    csUint stop = _cspec_out_set_stop();
+    cspec_out_hex(((csByte*)arg->value)[0]);
+    for (csSize i = 1; i < arg->size; ++i) {
+      cspec_out_ch(i % 16 ? ' ' : '\n');
       cspec_out_hex(((csByte*)arg->value)[i]);
-      cspec_out_ch(' ');
     }
+    cspec_out_str(" (");
+    for (csSize i = 0; i < arg->size; ++i) {
+      cspec_out_byte(((csByte*)arg->value)[i]);
+    }
+    cspec_out_ch(')');
+    test.out.tabstop = stop;
   }
   else {
     cspec_out_str("<unknown_type>");
@@ -1079,10 +1098,7 @@ void _cspec_log_fmt_exp2(
   int status, int line, const char* fmt, csFmtVar* args[10]
 ) {
   if (!fmt) return;
-
-  csUint old_stop = _cspec_log_fmt_start(status, line);
-
-  if (old_stop == 0) return;
+  if (!_cspec_log_fmt_start(status, line)) return;
 
   cspec_out_fmt(fmt);
 
@@ -1098,7 +1114,7 @@ void _cspec_log_fmt_exp2(
     _cspec_out_print(CONCOL_White);
   }
 
-  cspec_out_print();
+  if (param.padding) _cspec_out_print(0);
 }
 
 void _cspec_log_fmt_exp(

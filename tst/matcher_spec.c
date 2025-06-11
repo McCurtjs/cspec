@@ -802,6 +802,31 @@ describe(matcher_match_failed) {
       expect(str to not match("Hello!", cspec_streq), char*);
     }
 
+    it("should expect 1234 TO match 1234.0") {
+      int i = 1234;
+      float f = 1234.0f;
+      expect(i to match(f));
+    }
+
+    it("should expect 1095069860u to NOT match 12.34f") {
+      float f = 12.34f;
+      csUint u = 1095069860u;
+      expect(u to not match(f));
+    }
+
+    it("should expect 255 TO match 3.14") {
+      char c = 255;
+      double d = 3.141592653589;
+      expect(c to match(d));
+    }
+
+    it("should expect A to NOT match B") {
+      TestStructInts A = { .x = 1819043144, .y = 1752440943, .z = 6648421 };
+      //TestStructChars B = { .c = "Hello there" };
+      char B[] = "Hello there";
+      expect(A to not match(B));
+    }
+
   }
 
 }

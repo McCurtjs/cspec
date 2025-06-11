@@ -47,7 +47,7 @@ int main(int argc, char* argv[]) {
 #endif
 
 #ifdef CSPEC_MSVC
-  argv = (char*[]){ argv[0], "-snf", "matcher_spec.c:756"};
+  argv = (char*[]){ argv[0], "-snf", "matcher_spec.c:823"};
   argc = 3;
 #endif
 
