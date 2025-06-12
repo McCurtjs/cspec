@@ -1059,13 +1059,31 @@ static csBool _cspec_log_param2(const csFmtVar* arg) {
     /* default mode of printing for unknown types with a given size */
     csUint stop = _cspec_out_set_stop();
     cspec_out_hex(((csByte*)arg->value)[0]);
-    for (csSize i = 1; i < arg->size; ++i) {
-      cspec_out_ch(i % 16 ? ' ' : '\n');
+    csSize i;
+
+    for (i = 1; i < arg->size; ++i) {
+      cspec_out_ch(' ');
+      if (i % 16 == 0) {
+        cspec_out_ch('(');
+        for (csSize j = i - 16; j < i; ++j) {
+          cspec_out_byte(((csByte*)arg->value)[j]);
+        }
+        cspec_out_str(")\n");
+      }
       cspec_out_hex(((csByte*)arg->value)[i]);
     }
+
+    csSize idiff = i - i % 16;
+
+    if (i >= 16) {
+      for (csSize j = 0; j < 16 - (i % 16); ++j) {
+        cspec_out_str("   ");
+      }
+    }
+
     cspec_out_str(" (");
-    for (csSize i = 0; i < arg->size; ++i) {
-      cspec_out_byte(((csByte*)arg->value)[i]);
+    for (csSize j = idiff; j < i; ++j) {
+      cspec_out_byte(((csByte*)arg->value)[j]);
     }
     cspec_out_ch(')');
     test.out.tabstop = stop;

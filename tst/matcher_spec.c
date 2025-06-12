@@ -633,13 +633,13 @@ describe(matcher_match) {
   context("when using C11 or later (CSPEC_USE_DEDUCTION > 0)") {
 #if CSPEC_USE_DEDUCTION > 0
 
-    it("will automatically use the string matcher for char* values") {
+    it("will automatically use the string matcher for char* values [C11+]") {
       char* a = "Why, Hello!";
       char* c = a + 5;
       expect(c to match("Hello!"));
     }
 
-    it("will match C-style char arrays as strings") {
+    it("will match C-style char arrays as strings [C11+]") {
       char str[] = "Well, hello!";
       char st2[] = "Well, hello!";
       char* ptr = str;
@@ -657,13 +657,13 @@ describe(matcher_match) {
 
 #else
 
-    it("will -NOT- automatically use the string matcher for char* values") {
+    it("will -NOT- automatically use the string matcher for char* values [C99]") {
       char* a = "Why, Hello!";
       char* c = a + 5;
       expect(c to not match("Hello!"));
     }
 
-    it("will only match C-style char arrays as arrays (no strcmp for char*)") {
+    it("will only match C-style char arrays as arrays (no strcmp for char*) [C99]") {
       char str1[] = "Well, hello!";
       char str2[] = "Well, hello!";
       char* ptr = str1;
@@ -727,7 +727,7 @@ describe(matcher_match_failed) {
     context("when working with C-style arrays") {
       int box1[] = { 1, 2, 3 };
       int box2[] = { 1, 2, 3 };
-      int box3[] = { 1, 2, 3, 4 };
+      int box3[] = { 1, 2, 3, 4, 5, 6 };
 
       it("should expect p1 TO match p2") {
         int* p1 = box1, * p2 = box2;
@@ -833,7 +833,64 @@ describe(matcher_match_failed) {
 
 describe(matcher_function) {
 
-  it("should have function matcher specs - probably split between expression, function, and match");
+  context("in situations that work in every mode (provided type)") {
+
+    it("matches the result of a string comparison") {
+      expect(cspec_streq to be_true given("str", "str"));
+    }
+
+  }
+
+}
+
+describe(matcher_fn_expression) {
+
+  it("should have function expression matching");
+
+}
+
+describe(matcher_fn_match) {
+
+  context("in situations that work in every mode (provided type)") {
+
+    char lengthy_string[] = "This is a lengthy string but not that long";
+
+    it("matches the result of a comparirson function") {
+      csSize len = sizeof(lengthy_string) - 1;
+      expect(cspec_strlen to match(len) given(lengthy_string), csSize);
+    }
+
+    it("can take a literal value for the expected match value") {
+      expect(cspec_strlen to match(42) given(lengthy_string), csSize);
+    }
+
+  }
+
+}
+
+describe(matcher_fn_match_failed) {
+
+  expect(to_fail);
+
+  context("in situations that work in every mode (provided type)") {
+
+    char lengthy_string[] = "This is a lengthy string but not that long";
+
+    it("should expect result of cspec_strlen TO match len when given (lengthy_string)") {
+      csSize len = sizeof(lengthy_string);
+      expect(cspec_strlen to match(len) given(lengthy_string), csSize);
+    }
+
+    it("should expect result of cspec_strlen to NOT match len when given (lengthy_string)") {
+      csSize len = sizeof(lengthy_string) - 1;
+      expect(cspec_strlen to not match(len) given(lengthy_string), csSize);
+    }
+
+    it("should expect result of cspec_strlen TO match 12 when given (lengthy_string)") {
+      expect(cspec_strlen to match(12) given(lengthy_string), csSize);
+    }
+
+  }
 
 }
 
@@ -845,5 +902,8 @@ test_suite(tests_cspec_matchers) {
   test_group(matcher_match),
   test_group(matcher_match_failed),
   test_group(matcher_function),
+  test_group(matcher_fn_expression),
+  test_group(matcher_fn_match),
+  test_group(matcher_fn_match_failed),
   test_suite_end
 };
