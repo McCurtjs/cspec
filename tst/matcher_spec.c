@@ -530,104 +530,100 @@ void cpystchr(void* out, TestStructChars ch, csSize size) {
 
 # undef CSPEC_CUSTOM_TYPES_CPYFN
 # define CSPEC_CUSTOM_TYPES_CPYFN TestStructInts: cpystint, TestStructChars: cpystchr,
-#endif
 
 # undef CSPEC_CUSTOM_TYPES
 # define CSPEC_CUSTOM_TYPES default: "unknown",
+#endif
 
 describe(matcher_match) {
 
-  context("in situations that work in every mode (using variables)") {
+  it("checks for binary equivalence of data") {
+    int x = 12347, y = 12347, z = 75432;
+    expect(x to match(y));
+    expect(x to not match(z));
+  }
 
-    it("checks for binary equivalence of data") {
-      int x = 12347, y = 12347, z = 75432;
-      expect(x to match(y));
-      expect(x to not match(z));
-    }
+  it("will not match values of types with different sizes") {
+    int i = 123;
+    char c = 123;
+    expect(i to not match(c));
+    expect(i to match(c), int);
+  }
 
-    it("will not match values of types with different sizes") {
-      int i = 123;
-      char c = 123;
-      expect(i to not match(c));
-      expect(i to match(c), int);
-    }
+  it("will match C-style arrays") {
+    int box1[] = { 1, 2, 3 };
+    int box2[] = { 1, 2, 3 };
+    int box3[] = { 1, 2, 3, 4 };
 
-    it("will match C-style arrays") {
-      int box1[] = { 1, 2, 3 };
-      int box2[] = { 1, 2, 3 };
-      int box3[] = { 1, 2, 3, 4 };
+    int* p1 = box1;
+    int* p2 = box2;
 
-      int* p1 = box1;
-      int* p2 = box2;
+    /* pointers will compare the pointer values, not what they point to  */
+    /* this can be overridden in C11+ to use custom comparison functions */
+    expect(p1 to not match(p2));
+    expect(p1 to not match(box1));
 
-      /* pointers will compare the pointer values, not what they point to  */
-      /* this can be overridden in C11+ to use custom comparison functions */
-      expect(p1 to not match(p2));
-      expect(p1 to not match(box1));
+    /* comparing arrays directly will compare the actual memory */
+    expect(box1 to match(box2));
+    expect(box2 to not match(box3));
+  }
 
-      /* comparing arrays directly will compare the actual memory */
-      expect(box1 to match(box2));
-      expect(box2 to not match(box3));
-    }
+  it("will match custom struct values by memory size") {
+    TestVec A = { 1, 2 }, B = { 1, 2 }, C = { 2, 2 };
+    expect(A to match(B));
+    expect(A to not match(C));
+  }
 
-    it("will match custom struct values by memory size") {
-      TestVec A = { 1, 2 }, B = { 1, 2 }, C = { 2, 2 };
-      expect(A to match(B));
-      expect(A to not match(C));
-    }
+  it("will match custom struct values with an explicitly given type") {
+    TestVec A = { 1, 2 }, B = { 1, 2 }, C = { 2, 2 };
+    expect(A to match(B), TestVec);
+    expect(A to not match(C), TestVec);
 
-    it("will match custom struct values with an explicitly given type") {
-      TestVec A = { 1, 2 }, B = { 1, 2 }, C = { 2, 2 };
-      expect(A to match(B), TestVec);
-      expect(A to not match(C), TestVec);
+    /* Note: inline objects like this won't work due to variadic selection */
+    /* expect(A to match((TestVec) { 1, 2 }), TestVec); */
+  }
 
-      /* Note: inline objects like this won't work due to variadic selection */
-      /* expect(A to match((TestVec) { 1, 2 }), TestVec); */
-    }
+  it("can match using literal values when given explicit types") {
+    expect(1 to not match(2), int);
+  }
 
-    it("can match using literal values when given explicit types") {
-      expect(1 to not match(2), int);
-    }
+  it("will match values using an explicitly provided comparison function") {
+    char* a = "Hello!";
+    char* b = "And Hello!";
+    char* c = b + 4;
+    expect(a, != , c, char*);
+    expect(a to match(c, cspec_streq));
+  }
 
-    it("will match values using an explicitly provided comparison function") {
-      char* a = "Hello!";
-      char* b = "And Hello!";
-      char* c = b + 4;
-      expect(a, != , c, char*);
-      expect(a to match(c, cspec_streq));
-    }
+  it("will decay arrays to pointers when passing to provided comparison fn") {
+    char* str = "Hello!";
+    expect(str to match("Hello!", cspec_streq));
+  }
 
-    it("will decay arrays to pointers when passing to provided comparison fn") {
-      char* str = "Hello!";
-      expect(str to match("Hello!", cspec_streq));
-    }
+  it("can match variables of arbitarry types") {
+    int i = 1234;
+    float f = 12.34f;
+    expect(i to not match(f));
 
-    it("can match variables of arbitarry types") {
-      int i = 1234;
-      float f = 12.34f;
-      expect(i to not match(f));
+    char c = 255;
+    double d = 3.141592653589;
+    expect(c to not match(d));
 
-      char c = 255;
-      double d = 3.141592653589;
-      expect(c to not match(d));
+    /* csUint u = *(csUint*)&f; */
+    csUint u = 1095069860u;
+    expect(u to match(f));
+  }
 
-      //csUint u = *(csUint*)&f;
-      csUint u = 1095069860u;
-      expect(u to match(f));
-    }
+  it("is type agnostic by default and compares memory directly") {
+    TestStructInts A = { .x = 1819043144, .y = 1752440943, .z = 6648421 };
+    TestStructChars B = { .c = "Hello there" };
+    expect(A to match(B));
+  }
 
-    it("is type agnostic by default and compares memory directly") {
-      TestStructInts A = { .x = 1819043144, .y = 1752440943, .z = 6648421 };
-      TestStructChars B = { .c = "Hello there" };
-      expect(A to match(B));
-    }
-
-    it("is type agnostic for arrays and compares memory directly") {
-      int arr1[] = { 1819043144, 1752440943, 6648421 };
-      char arr2[] = "Hello there";
-      expect(arr1 to match(arr2));
-    }
-
+  it("is type agnostic for arrays and compares memory directly") {
+    int arr1[] = { 1819043144, 1752440943, 6648421 };
+    char arr2[] = "Hello there";
+    expect(arr1 to match(arr2));
   }
 
   context("when using C11 or later (CSPEC_USE_DEDUCTION > 0)") {
@@ -702,168 +698,199 @@ describe(matcher_match_failed) {
 
   expect(to_fail);
 
-  context("in situations that work in every mode (using variables)") {
+  it("should expect x to NOT match y, both 12347") {
+    int x = 12347, y = 12347;
+    expect(x to not match(y));
+  }
 
-    it("should expect x to NOT match y, both 12347") {
-      int x = 12347, y = 12347;
-      expect(x to not match(y));
+  it("should expect x TO match y, with 12347 and 75432") {
+    int x = 12347, y = 75432;
+    expect(x to match(y));
+  }
+
+  it("should expect i TO match c, [int] vs [char]") {
+    int i = 123; char c = 123;
+    expect(i to match(c));
+  }
+
+  it("should expect i to NOT match c, coalescing both to [int]") {
+    int i = 123; char c = 123;
+    expect(i to not match(c), int);
+  }
+
+  context("when working with C-style arrays") {
+    int box1[] = { 1, 2, 3 };
+    int box2[] = { 1, 2, 3 };
+    int box3[] = { 1, 2, 3, 4, 5, 6 };
+
+    it("should expect p1 TO match p2") {
+      int* p1 = box1, * p2 = box2;
+      expect(p1 to match(p2));
     }
 
-    it("should expect x TO match y, with 12347 and 75432") {
-      int x = 12347, y = 75432;
-      expect(x to match(y));
+    it("should expect box1 TO match p1") {
+      int* p1 = box1;
+      expect(p1 to match(box1));
     }
 
-    it("should expect i TO match c, [int] vs [char]") {
-      int i = 123; char c = 123;
-      expect(i to match(c));
+    it("should expect box2 to NOT match box2") {
+      expect(box1 to not match(box2));
     }
 
-    it("should expect i to NOT match c, coalescing both to [int]") {
-      int i = 123; char c = 123;
-      expect(i to not match(c), int);
+    it("should expect box2 TO match box3") {
+      expect(box2 to match(box3));
     }
 
-    context("when working with C-style arrays") {
-      int box1[] = { 1, 2, 3 };
-      int box2[] = { 1, 2, 3 };
-      int box3[] = { 1, 2, 3, 4, 5, 6 };
-
-      it("should expect p1 TO match p2") {
-        int* p1 = box1, * p2 = box2;
-        expect(p1 to match(p2));
-      }
-
-      it("should expect box1 TO match p1") {
-        int* p1 = box1;
-        expect(p1 to match(box1));
-      }
-
-      it("should expect box2 to NOT match box2") {
-        expect(box1 to not match(box2));
-      }
-
-      it("should expect box2 TO match box3") {
-        expect(box2 to match(box3));
-      }
-
-      it("should expect box2 TO match box3 (forced pointer decay)") {
-        expect(box2 to match(box3), int*);
-      }
-
+    it("should expect box2 TO match box3 (forced pointer decay)") {
+      expect(box2 to match(box3), int*);
     }
 
-    context("when matching struct values") {
-      TestVec A = { 1, 2 }, B = { 1, 2 }, C = { 2, 2 };
+  }
 
-      it("should expect A to NOT match B") {
-        expect(A to not match(B));
-      }
-
-      it("should expect A TO match C") {
-        expect(A to match(C));
-      }
-
-      it("should expect A to NOT match B with an explicit type") {
-        expect(A to not match(B), TestVec);
-      }
-
-      it("should expect A TO match C with an explicit type") {
-        expect(A to match(C), TestVec);
-      }
-
-    }
-
-    it("should expect 1 TO match 2 using literal values and a provided type int") {
-      expect(1 to match(2), int);
-    }
-
-    it("should expect 1 to NOT match 1 using literal values and a provided type char") {
-      expect(1 to not match(1), char);
-    }
-
-    it("should expect str TO match 'Hi!' using cspec_streq (using array parameter)") {
-      char str[] = "Hello!";
-      expect(str to match("Hi!", cspec_streq));
-    }
-
-    it("should expect str TO match 'Hi!' using cspec_streq (using array parameter) (explicit type)") {
-      char str[] = "Hello!";
-      expect(str to match("Hi!", cspec_streq), char*);
-    }
-
-    it("should expect str to NOT match 'Hello!' using cspec_streq") {
-      char* str = "Hello!";
-      expect(str to not match("Hello!", cspec_streq));
-    }
-
-    it("should expect str to NOT match 'Hello!' using cspec_streq (explicit type)") {
-      char* str = "Hello!";
-      expect(str to not match("Hello!", cspec_streq), char*);
-    }
-
-    it("should expect 1234 TO match 1234.0") {
-      int i = 1234;
-      float f = 1234.0f;
-      expect(i to match(f));
-    }
-
-    it("should expect 1095069860u to NOT match 12.34f") {
-      float f = 12.34f;
-      csUint u = 1095069860u;
-      expect(u to not match(f));
-    }
-
-    it("should expect 255 TO match 3.14") {
-      char c = 255;
-      double d = 3.141592653589;
-      expect(c to match(d));
-    }
+  context("when matching struct values") {
+    TestVec A = { 1, 2 }, B = { 1, 2 }, C = { 2, 2 };
 
     it("should expect A to NOT match B") {
-      TestStructInts A = { .x = 1819043144, .y = 1752440943, .z = 6648421 };
-      //TestStructChars B = { .c = "Hello there" };
-      char B[] = "Hello there";
       expect(A to not match(B));
     }
 
+    it("should expect A TO match C") {
+      expect(A to match(C));
+    }
+
+    it("should expect A to NOT match B with an explicit type") {
+      expect(A to not match(B), TestVec);
+    }
+
+    it("should expect A TO match C with an explicit type") {
+      expect(A to match(C), TestVec);
+    }
+
+  }
+
+  it("should expect 1 TO match 2 using literal values and a provided type int") {
+    expect(1 to match(2), int);
+  }
+
+  it("should expect 1 to NOT match 1 using literal values and a provided type char") {
+    expect(1 to not match(1), char);
+  }
+
+  it("should expect str TO match 'Hi!' using cspec_streq (using array parameter)") {
+    char str[] = "Hello!";
+    expect(str to match("Hi!", cspec_streq));
+  }
+
+  it("should expect str TO match 'Hi!' using cspec_streq (using array parameter) (explicit type)") {
+    char str[] = "Hello!";
+    expect(str to match("Hi!", cspec_streq), char*);
+  }
+
+  it("should expect str to NOT match 'Hello!' using cspec_streq") {
+    char* str = "Hello!";
+    expect(str to not match("Hello!", cspec_streq));
+  }
+
+  it("should expect str to NOT match 'Hello!' using cspec_streq (explicit type)") {
+    char* str = "Hello!";
+    expect(str to not match("Hello!", cspec_streq), char*);
+  }
+
+  it("should expect 1234 TO match 1234.0") {
+    int i = 1234;
+    float f = 1234.0f;
+    expect(i to match(f));
+  }
+
+  it("should expect 1095069860u to NOT match 12.34f") {
+    float f = 12.34f;
+    csUint u = 1095069860u;
+    expect(u to not match(f));
+  }
+
+  it("should expect 255 TO match 3.14") {
+    char c = 255;
+    double d = 3.141592653589;
+    expect(c to match(d));
+  }
+
+  it("should expect A to NOT match B") {
+    TestStructInts A = { .x = 1819043144, .y = 1752440943, .z = 6648421 };
+    char B[] = "Hello there";
+    expect(A to not match(B));
   }
 
 }
 
 describe(matcher_function) {
 
-  context("in situations that work in every mode (provided type)") {
+  it("matches the result of a string comparison") {
+    expect(cspec_streq to be_true given("str", "str"));
+    expect(cspec_streq to not be_false given("str", "str"));
+  }
 
-    it("matches the result of a string comparison") {
-      expect(cspec_streq to be_true given("str", "str"));
-    }
+  it("compares the result against complex matchers") {
+    expect(cspec_strlen to be_between(3, 5, inclusive, csSize) given("test"));
+    expect(cspec_strlen to not be_between(1, 3, inclusive, csSize) given("test"));
+  }
 
+}
+
+describe(matcher_function_failed) {
+
+  expect(to_fail);
+
+  it("should expect cspec_streq to be_false given 'str', 'str'") {
+    expect(cspec_streq to be_false given("str", "str"));
+  }
+
+  it("should expect cspec_streq to NOT be_true given 'str', 'str'") {
+    expect(cspec_streq to not be_true given("str", "str"));
+  }
+
+  it("should expect cspec_strlen to NOT be_between(1, 7) given('test')") {
+    expect(cspec_strlen to not be_between(1, 7, inclusive, csSize) given("test"));
   }
 
 }
 
 describe(matcher_fn_expression) {
 
-  it("should have function expression matching");
+  it("should expect cspec_streq to equal(TRUE) given 'str', 'str'") {
+    expect(cspec_streq to equal(TRUE) given("str", "str"));
+  }
+
+  it("should expect cspec_streq to be < 10 given 'test'") {
+    expect(cspec_strlen to be( < , 10) given("test"));
+  }
+
+}
+
+describe(matcher_fn_expression_failed) {
+
+  expect(to_fail);
+
+  it("should expect X == csFalse where X == cspec_streq('str', 'str')") {
+    expect(cspec_streq to equal(FALSE) given("str", "str"));
+  }
+
+  it("should expect X > 10 where X = cspec_strlen('test')") {
+    expect(cspec_strlen to be( > , 10) given("test"));
+  }
 
 }
 
 describe(matcher_fn_match) {
 
-  context("in situations that work in every mode (provided type)") {
+  char lengthy_string[] = "This is a lengthy string but not that long";
 
-    char lengthy_string[] = "This is a lengthy string but not that long";
+  it("matches the result of a comparirson function") {
+    csSize len = sizeof(lengthy_string) - 1;
+    expect(cspec_strlen to match(len) given(lengthy_string), csSize);
+  }
 
-    it("matches the result of a comparirson function") {
-      csSize len = sizeof(lengthy_string) - 1;
-      expect(cspec_strlen to match(len) given(lengthy_string), csSize);
-    }
-
-    it("can take a literal value for the expected match value") {
-      expect(cspec_strlen to match(42) given(lengthy_string), csSize);
-    }
-
+  it("can take a literal value for the expected match value") {
+    expect(cspec_strlen to match(42) given(lengthy_string), csSize);
   }
 
 }
@@ -872,24 +899,20 @@ describe(matcher_fn_match_failed) {
 
   expect(to_fail);
 
-  context("in situations that work in every mode (provided type)") {
+  char lengthy_string[] = "This is a lengthy string but not that long";
 
-    char lengthy_string[] = "This is a lengthy string but not that long";
+  it("should expect result of cspec_strlen TO match len when given (lengthy_string)") {
+    csSize len = sizeof(lengthy_string);
+    expect(cspec_strlen to match(len) given(lengthy_string), csSize);
+  }
 
-    it("should expect result of cspec_strlen TO match len when given (lengthy_string)") {
-      csSize len = sizeof(lengthy_string);
-      expect(cspec_strlen to match(len) given(lengthy_string), csSize);
-    }
+  it("should expect result of cspec_strlen to NOT match len when given (lengthy_string)") {
+    csSize len = sizeof(lengthy_string) - 1;
+    expect(cspec_strlen to not match(len) given(lengthy_string), csSize);
+  }
 
-    it("should expect result of cspec_strlen to NOT match len when given (lengthy_string)") {
-      csSize len = sizeof(lengthy_string) - 1;
-      expect(cspec_strlen to not match(len) given(lengthy_string), csSize);
-    }
-
-    it("should expect result of cspec_strlen TO match 12 when given (lengthy_string)") {
-      expect(cspec_strlen to match(12) given(lengthy_string), csSize);
-    }
-
+  it("should expect result of cspec_strlen TO match 12 when given (lengthy_string)") {
+    expect(cspec_strlen to match(12) given(lengthy_string), csSize);
   }
 
 }
@@ -902,7 +925,9 @@ test_suite(tests_cspec_matchers) {
   test_group(matcher_match),
   test_group(matcher_match_failed),
   test_group(matcher_function),
+  test_group(matcher_function_failed),
   test_group(matcher_fn_expression),
+  test_group(matcher_fn_expression_failed),
   test_group(matcher_fn_match),
   test_group(matcher_fn_match_failed),
   test_suite_end

@@ -1088,31 +1088,34 @@ void cpyptr(void* dst, const void* src, csSize size);
 
 #if CSPEC_USE_DEDUCTION > 0
 #
-# ifndef CSPEC_CUSTOM_TYPES
+# ifdef CSPEC_CUSTOM_TYPES
+#   define _CSPEC_CUSTOM_TYPE_C ,
+# else
 #   define CSPEC_CUSTOM_TYPES
+#   define _CSPEC_CUSTOM_TYPE_C
 # endif
 #
-# ifndef CSPEC_CUSTOM_MATCH_FNS
+# ifdef CSPEC_CUSTOM_MATCH_FNS
+#   define _CSPEC_CUSTOM_MATCH_FN_C ,
+# else
 #   define CSPEC_CUSTOM_MATCH_FNS
+#   define _CSPEC_CUSTOM_MATCH_FN_C
 # endif
 #
 # if CSPEC_USE_DEDUCTION == 1
-#   /* Without typeof, we're not able to differentiate between arrays and pointers, so we'll just decay to pointers */
+#   /* Without typeof, we're not able to differentiate between arrays and     */
+#   /*    pointers, so we'll just decay to pointers                           */
 #   define _type_s_ptr_arr(X, T) #T"*"
-#
-#   /* Without typeof, we can still direct to the correct match functions, but our copied values are stored in char arrays *//*
-#   define _match_fn(A, B) _Generic((A), CSPEC_CUSTOM_MATCH_FNS                \
-      char*: _cspec_streq, const char*: _cspec_streq, default: cspec_memeq     \
-    ) ((void*)_A, (void*)_B, sizeof(A), sizeof(B))                          /**/
 #
 #   define AUTO_RES(NAME, VALUE) const void* NAME = _Generic((VALUE),          \
       char*: VALUE, const char*: VALUE, default: &VALUE                        \
     )                                                                       /**/
 #
-#   define CSPEC_MATCH_SETUP(A, B, F) AUTO_RES(_A, (A)); AUTO_RES(_B, (B)); csBool _test = F(A, B)
+#   define CSPEC_MATCH_SETUP(A, B, F)                                          \
+      AUTO_RES(_A, (A)); AUTO_RES(_B, (B)); csBool _test = F(A, B)          /**/
 #
 #   define _match_fn(A, B) FALSE;                                              \
-      _test ^= _Generic((A), CSPEC_CUSTOM_MATCH_FNS                            \
+      _test ^= _Generic((A), CSPEC_CUSTOM_MATCH_FNS _CSPEC_CUSTOM_MATCH_FN_C   \
         char*: _cspec_streq, const char*: _cspec_streq, default: cspec_memeq   \
       ) (_A, _B, sizeof(A), sizeof(B))                                      /**/
 #
@@ -1123,7 +1126,8 @@ void cpyptr(void* dst, const void* src, csSize size);
     ) ((void*)&(A), (void*)&(B), sizeof(A), sizeof(B))                      /**/
 #
 #   ifdef CSPEC_MSVC
-#     /* MSVC has an issue that sometimes causes _Generic to throw a warning that a variable was initialized but not used. */
+#     /* MSVC has an issue that sometimes causes _Generic to throw a warning  */
+#     /*    that a variable was initialized but not used.                     */
 #     pragma warning ( disable : 4189 )
 #
 #     /* Technically legal, but trips warning "unreachable-code-generic-assoc" in CLang */
@@ -1138,7 +1142,7 @@ void cpyptr(void* dst, const void* src, csSize size);
 /* Adding a 'default' field can allow custom types to be used in an "expect fn to be_something given(custom1, custom2)" */
 /*  format, but then it won't be obvious that the type is not supported, and the output will not be useful              */
 # define _type_s(X) _Generic((X), void*: "void*", const void*: "const void*",                                         \
-  CSPEC_CUSTOM_TYPES   _type_s_h(X, _Bool),                                                                           \
+  CSPEC_CUSTOM_TYPES _CSPEC_CUSTOM_TYPE_C  _type_s_h(X, _Bool),                                                       \
   _type_s_h(X, char),  _type_s_h(X, short), _type_s_h(X, int),    _type_s_h(X, long),   _type_s_h(X, long long),      \
   _type_s_h(X, unsigned char), _type_s_h(X, unsigned short),      _type_s_h(X, unsigned int),                         \
   _type_s_h(X, unsigned long), _type_s_h(X, unsigned long long),  _type_s_h(X, float),  _type_s_h(X, double)          \
@@ -1172,8 +1176,16 @@ void cpyptr(void* dst, const void* src, csSize size);
 # if CSPEC_USE_DEDUCTION > 1
 #   define _cspec_fail_match(F, A, B, u, n) _cspec_fail_fmt("expected "#A" to {}match "#B u(#F) "%n\nvalue 1: {}\nvalue 2: {}", "c str", n ? "not " : "", _type_s(_R), (void*)&_R, _type_s(_B), (void*)&_B);
 # else
-#   define _cspec_fail_match(A, B, Ta, Tb, U, n) _cspec_fail_fmt("Expected "#A" to {}match "#B U "%n\nvalue 1: {}\nvalue 2: {}", "c str", n ? "not " : "", Ta, _A, Tb, _B)
-#   define _cspec_fail_match2(A,B, Ta, Tb, U, n) _cspec_fail_fmt2("Expected "#A" to {}match "#B U "%n\nvalue 1: {}\nvalue 2: {}", _cspec_fvar(n ? "not " : "", char*, "c str"), _cspec_fvar(_A, A, Ta), _cspec_fvar(_B, B, Tb))
+#   define _cspec_fail_match(A, B, Ta, Tb, U, n) _cspec_fail_fmt(              \
+      "Expected "#A" to {}match "#B U "%n\nvalue 1: {}\nvalue 2: {}",          \
+      "c str", n ? "not " : "", Ta, _A, Tb, _B                                 \
+    )                                                                       /**/
+#
+#   define _cspec_fail_match2(A,B, Ta, Tb, U, n) _cspec_fail_fmt2(             \
+      "Expected "#A" to {}match "#B U "%n\nvalue 1: {}\nvalue 2: {}",          \
+      _cspec_fvar(n ? "not " : "", char*, "c str"),                            \
+      _cspec_fvar(_A, A, Ta), _cspec_fvar(_B, B, Tb)                           \
+    )                                                                       /**/
 # endif
 #endif
 
@@ -1227,7 +1239,7 @@ void cpyptr(void* dst, const void* src, csSize size);
   _cspec_log(2, __LINE__, NULL, "expected "S);                                                                                                                          \
     if (_pvalue) {                                                                                                                                                      \
       if (_print_expected_value) _cspec_log_fmt2(2, 0, "but found {} on iteration {}\ncomparing {}", _cspec_fvar((void*)_pvalue, _pvalue, #T),                          \
-                                                 _cspec_fvar(&_index, csUint, "uint"), _cspec_fvar(&_expected, _expected, #T));                                         \
+                                                               _cspec_fvar(&_index, csUint, "uint"), _cspec_fvar(&_expected, _expected, #T));                           \
       else                       _cspec_log_fmt2(2, 0, "but found {} on iteration {}", _cspec_fvar((void*)_pvalue, _pvalue, #T), _cspec_fvar(&_index, csUint, "uint")); \
     return;                                                                                                                                                             \
   } }                                                                                                                                                                /**/
