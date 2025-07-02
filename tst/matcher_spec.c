@@ -520,17 +520,7 @@ typedef struct TestVec {
   int x, y;
 } TestVec;
 
-#if CSPEC_USE_DEDUCTION == 1
-void cpystint(void* out, TestStructInts i, csSize size) {
-  cspec_memcpy(out, &i, size);
-}
-void cpystchr(void* out, TestStructChars ch, csSize size) {
-  cspec_memcpy(out, &ch, size);
-}
-
-# undef CSPEC_CUSTOM_TYPES_CPYFN
-# define CSPEC_CUSTOM_TYPES_CPYFN TestStructInts: cpystint, TestStructChars: cpystchr,
-
+#if CSPEC_USE_DEDUCTION >= 1
 # undef CSPEC_CUSTOM_TYPES
 # define CSPEC_CUSTOM_TYPES default: "unknown",
 #endif
