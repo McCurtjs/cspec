@@ -848,9 +848,11 @@ void cspec_assert(csBool assertion);
   Extras
 \*----------------------------------------------------------------------------*/
 
-typedef csBool (*resolve_user_types_fn)(const char** p_type, const void* value);
+typedef csBool (*cspec_resolve_user_types_fn)(const char** p_type, const void* value);
 
-typedef void (*print_backtrace_fn)(void);
+typedef void (*cspec_print_backtrace_fn)(void);
+
+typedef void (*cspec_print_line_fn)(const char* str, csUint len, csUint color);
 
 /*
 * \brief A function pointer that is initially null, but can be set by a user to
@@ -875,13 +877,29 @@ typedef void (*print_backtrace_fn)(void);
 *   In this case, if ptyp_N was modified, the updated value will be used to
 *   determine how to write the contents of N.
 */
-extern resolve_user_types_fn resolve_user_types;
+extern cspec_resolve_user_types_fn cspec_opt_resolve_user_types;
+
+/*
+* \brief A function pointer that is initially null, but can be set by a user to
+*   describe how to print basic output. If left null, the program will have no
+*   output to stdout. The basic behavior should simply route the call to puts.
+*
+* \param str - A pointer to the null-terminated string to print.
+*
+* \param len - The length of the string (not including the terminating null).
+*
+* \param color - When building for WASM, 4 bytes representing a color value in
+*   RGBA format that should be used for the output color following the first
+*   instance of `%c` in the string. Outside of WASM, the color information is
+*   embedded in the string per the regular Unix console color values.
+*/
+extern cspec_print_line_fn cspec_opt_print_line;
 
 /*
 * \brief A function pointer that is initially null, but can be set by a user to
 *   describe how to print a backtrace.
 */
-extern print_backtrace_fn cspec_opt_print_backtrace;
+extern cspec_print_backtrace_fn cspec_opt_print_backtrace;
 
 /*
 * \brief Default backtrace function

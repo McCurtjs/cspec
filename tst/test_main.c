@@ -24,7 +24,7 @@
 
 #include "cspec.h"
 
-// Test suites
+/* Declare list of test suites */
 
 extern TestSuite tests_libcs;
 extern TestSuite tests_cspec_out;
@@ -34,11 +34,33 @@ extern TestSuite tests_cspec_matchers;
 extern TestSuite tests_cspec_containers;
 extern TestSuite tests_cspec;
 
-// Main
+/* Create function for output handling */
 
 #ifdef __WASM__
+extern void js_log(const char* str, unsigned int len, unsigned int color);
+
+void printer(const char* str, csUint len, csUint color) {
+  js_log(str, len, color);
+}
+#else
+extern int puts(const char* s);
+
+void printer(const char* str, csUint len, csUint color) {
+  (void)len;
+  (void)color;
+  puts(str);
+}
+
+#endif
+
+/* Main */
+
+#ifdef __WASM__
+
+/* Export the cspec_set_line function for testing the interactive WASM build */
 void __attribute((export_name("set_line"))) cspec_set_line(int line);
 
+/* Defnition of main is dfiferent when building for Web-Assembly */
 static char* argv[] = { "WASM", "-v", "-f" };
 int __attribute__((export_name("spec_main"))) spec_main(int argc, int line) {
   cspec_set_line(line);
@@ -46,6 +68,7 @@ int __attribute__((export_name("spec_main"))) spec_main(int argc, int line) {
 int main(int argc, char* argv[]) {
 #endif
 
+/* Test values for building in Visual Studio without having to modify properties */
 #ifdef CSPEC_MSVC
   argv = (char*[]){ argv[0], "-snf", "out_spec.c"};
   argc = 2;
@@ -61,6 +84,7 @@ int main(int argc, char* argv[]) {
     &tests_cspec
   };
 
+  cspec_opt_print_line = printer;
   cspec_opt_print_backtrace = cspec_default_print_backtrace;
 
   return cspec_run_all(test_suites);

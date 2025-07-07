@@ -52,19 +52,15 @@
 */
 #include "cspec.h"
 
-/*
-* Create default modes of output - this should be replaced with a generic
-*   format function that can be expected by the user and defined either at
-*   compile time or passed in as an argument from main.
-*/
 #ifdef __WASM__
 # define CONCOL(Color, CON, HEX) MACRO_CONCAT(CONCOL_, Color) = HEX
 #else
 # define CONCOL(Color, CON, HEX) MACRO_CONCAT(CONCOL_, Color) = CON
 #endif
 
-resolve_user_types_fn resolve_user_types = NULL;
-print_backtrace_fn cspec_opt_print_backtrace = NULL;
+cspec_resolve_user_types_fn cspec_opt_resolve_user_types  = NULL;
+cspec_print_line_fn         cspec_opt_print_line          = NULL;
+cspec_print_backtrace_fn    cspec_opt_print_backtrace     = NULL;
 
 #define DEFAULT_TABSIZE 2
 
@@ -86,12 +82,6 @@ typedef enum ConsoleColor {
   CONCOL(bCyan,   46, 0x100ffff),
   CONCOL(bWhite,  47, 0x1ffffff)
 } ConsoleColor;
-
-#ifdef __WASM__
-extern void js_log(const char* str, unsigned int len, ConsoleColor color);
-#else
-extern int puts(const char* s);
-#endif
 
 typedef enum PrintLevel {
   P_CLEAR,
@@ -644,10 +634,7 @@ static void _cspec_out_print(ConsoleColor color) {
   /* flush any remaining format string */
   _cspec_out_fmt_flush();
 
-#ifdef __WASM__
-  test.out.buffer[test.out.index] = '\0';
-  js_log(test.out.buffer, test.out.index, color);
-#else
+#ifndef __WASM__
   /* find the color specifier if it was added into the string */
   char* c = test.out.buffer;
   for (csUint i = 0; *c && i < test.out.index; ++i) {
@@ -664,10 +651,13 @@ static void _cspec_out_print(ConsoleColor color) {
     }
     ++c;
   }
+#endif
 
   test.out.buffer[test.out.index] = '\0';
-  puts(test.out.buffer);
-#endif
+
+  if (cspec_opt_print_line) {
+    cspec_opt_print_line(test.out.buffer, test.out.index, color);
+  }
 
   cspec_out_clear();
 }
@@ -921,10 +911,10 @@ static csBool _cspec_log_param2(const csFmtVar* arg) {
 
   csBool written = TRUE;
 
-  if (resolve_user_types) {
+  if (cspec_opt_resolve_user_types) {
     const char* old_fmt = test.out.fmt;
     test.out.fmt = NULL;
-    written = resolve_user_types((const char**)&arg->type, arg->value);
+    written = cspec_opt_resolve_user_types((const char**)&arg->type, arg->value);
     test.out.fmt = old_fmt;
 
     if (written) {
