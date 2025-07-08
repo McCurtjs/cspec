@@ -670,8 +670,8 @@ describe(matcher_match) {
   context("when using C23 mode only (CSPEC_USE_DEDUCTION > 1)") {
 #if CSPEC_USE_DEDUCTION > 1
 
-    it("can accept basic type literal values") {
-      expect('a' to match(0x61));
+    it("can (not) accept basic type literal values") {
+      expect('a' to match(0x61), char);
     }
 
     it("probably has some cases that match this situation - probably involving literal values");
