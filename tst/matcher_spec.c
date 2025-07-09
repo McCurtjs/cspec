@@ -595,7 +595,7 @@ describe(matcher_match) {
     float f = 12.34f;
     expect(i to not match(f));
 
-    char c = 255;
+    csByte c = 255;
     double d = 3.141592653589;
     expect(c to not match(d));
 
@@ -799,7 +799,7 @@ describe(matcher_match_failed) {
   }
 
   it("should expect 255 TO match 3.14") {
-    char c = 255;
+    csByte c = 255;
     double d = 3.141592653589;
     expect(c to match(d));
   }
@@ -851,7 +851,7 @@ describe(matcher_fn_expression) {
   }
 
   it("should expect cspec_streq to be < 10 given 'test'") {
-    expect(cspec_strlen to be( < , 10) given("test"));
+    expect(cspec_strlen to be( < , 10u) given("test"));
   }
 
 }
@@ -865,7 +865,7 @@ describe(matcher_fn_expression_failed) {
   }
 
   it("should expect X > 10 where X = cspec_strlen('test')") {
-    expect(cspec_strlen to be( > , 10) given("test"));
+    expect(cspec_strlen to be( > , 10u) given("test"));
   }
 
 }
