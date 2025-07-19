@@ -943,7 +943,7 @@ static csBool _cspec_log_param2(const csFmtVar* arg) {
 #if CSPEC_USE_DEDUCTION == 0
     cspec_out_str(*(const char**)N);
 #else
-    cspec_out_str((const char*) N);
+    cspec_out_str(*(const char**) N);
 #endif
     cspec_out_ch('"');
   }
@@ -1806,7 +1806,7 @@ csBool _cspec_test_end(void) {
 
   /* each expect(to_warn) must be paired with exactly one warning each */
   if (test.pass.expect_warning) {
-    _cspec_log(S_FAILURE, 0, NULL, "expected a warning, but didn't receive one");
+    _cspec_log(S_FAILURE, 0, NULL, "expected warning, but didn't receive one");
   }
 
   /* consolidate test warnings */

@@ -830,12 +830,16 @@ describe(matcher_function_failed) {
 
   expect(to_fail);
 
-  it("should expect cspec_streq to be_false given 'str', 'str'") {
+  it("should expect cspec_streq to be_false given('str', 'str')") {
     expect(cspec_streq to be_false given("str", "str"));
   }
 
-  it("should expect cspec_streq to NOT be_true given 'str', 'str'") {
+  it("should expect cspec_streq to NOT be_true given('str', 'str')") {
     expect(cspec_streq to not be_true given("str", "str"));
+  }
+
+  it("should expect cspec_streq TO be_true given('A', 'B')") {
+    expect(cspec_streq to be_true given("A", "B"));
   }
 
   it("should expect cspec_strlen to NOT be_between(1, 7) given('test')") {
@@ -905,6 +909,12 @@ describe(matcher_fn_match_failed) {
     expect(cspec_strlen to match(12) given(lengthy_string), csSize);
   }
 
+  it("should expect result of cspec_ishex to match value when given('x')") {
+    int value = 10;
+    int x = 'x';
+    expect(cspec_ishex to match(value) given('x'));
+  }
+
 }
 
 test_suite(tests_cspec_matchers) {
@@ -922,3 +932,11 @@ test_suite(tests_cspec_matchers) {
   test_group(matcher_fn_match_failed),
   test_suite_end
 };
+
+// TODO: can the test suite macro be made without the `end` by
+// putting everything into the param list?
+// test_suite(tests_cspec_matchers,
+//    test_group(matchers_basic),
+//    test_group(matchers_basic_failed),
+//    ...
+//  );
