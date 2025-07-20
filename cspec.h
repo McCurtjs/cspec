@@ -379,9 +379,14 @@ typedef struct TestSuite {
 * \param - `expect(<container> to all_be(<operator> , B, <Con. Type>, <Type>))`
 * \param - `expect(<container> to all(be_<matcher>))` // defaults to c_array
 * \param - `expect(<container> to all(be_<matcher>, <Container Type>))`
-* \param - `expect(<container> to all(be_<matcher>, <Container Type>, <Type>))`
+* \param - `expect(<container> to all(be_<matcher>, <Container Type>), <Type>)`
+* \param - `expect(<container> to all(be_<matcher>), <Type>)`
 * \param - `expect(<container> to all_match(B))`
-* \param - `expect(<container> to all_match(B, <EQ FN>, <Con. Type>, <Type>))`
+* \param - `expect(<container> to all_match(B), <Type>)`
+* \param - `expect(<container> to all_match(B, <Con. Type>))`
+* \param - `expect(<container> to all_match(B, <Con. Type>), <Type>)`
+* \param - `expect(<container> to all_match(B, <Con. Type>, <EQ FN>))`
+* \param - `expect(<container> to all_match(B, <Con. Type>, <EQ FN>), <Type>)`
 */
 #define expect(...)               _expect_va(#__VA_ARGS__, __VA_ARGS__)
 
@@ -1518,8 +1523,9 @@ void cpyptr(void* dst, const void* src, csSize size);
 # define _expect_expr(S, A, x, B, ...)                  AUTO_DUP(_R , (A));   AUTO_DUP(_B , (B));                                             if (!(_R x _B))   _cspec_fail_typed(A, x, B, _type_s(_R), _type_s(_B))
 # define _expect_comp(S, A, M, ...)                     AUTO_DUP(_R , (A));                       csBool _test = M(_R);                       if (!_test)       _cspec_fail_comp(S)
 #endif
-#define _expect_all_type(S, A, F, M, B,_t,_r, C, _, T)                                            csBool _test = F(A, B, C, T, M);            if (!_test)       _cspec_fail_all(S, T)
-#define _expect_all(S, A, F, M, B, T, R, C, ...)                                                  csBool _test = F(A, B, C, R(T, A, C), M);   if (!_test)       _cspec_fail_all(S, T)
+#define _expect_all_type(S, A, F, M, B, E,_r, C, _, T)                                            csBool _test = F(A, B, C, T, M, E);         if (!_test)       _cspec_fail_all(S, T)
+// TODO: Remove R and shift 1?        v - it's always _cspec_type_def
+#define _expect_all(S, A, F, M, B, E, R, C, ...)                                                  csBool _test = F(A, B, C, R(A, C), M, E);   if (!_test)       _cspec_fail_all(S, T)
 #define _expect_type2(S, A, x, B, T, t, ...)                   T _R = (A);           t _B = (B);                                              if (!(_R x _B))   _cspec_fail_typed(A, x, B, #T, #t)
 #define _expect_type1(S, A, x, B, T, ...)                      T _R = (A);           T _B = (B);                                              if (!(_R x _B))   _cspec_fail_typed(A, x, B, #T, #T)
 #define _expect_true(S, A, ...)                                                                                                               if (!(A))         cspec_fail("expected "S)
@@ -1535,11 +1541,8 @@ void cpyptr(void* dst, const void* src, csSize size);
 /*    container_first() function that gets the first element in the object    */
 /* The *_first function is assumed to have the same prefix as the foreach     */
 /* If pre-C23 mode we can't infer a type, so if none is provided assume int   */
-#define _cspec_type_sel(T, A, C) T
 #if CSPEC_USE_DEDUCTION > 1
-# define _cspec_type_def(T, A, C) typeof((0, (C##_first(A))))
-#else
-# define _cspec_type_def(T, A, C) int
+# define _cspec_type_def(A, C) typeof((0, (C##_first(A))))
 #endif
 
 /* Shared composition setup for expect(... to all(...)) variants.             */
@@ -1580,24 +1583,24 @@ void cpyptr(void* dst, const void* src, csSize size);
 /*    R: type resolver that either picks an explicitly given type, or typeof  */
 /*    C: the container type prefix for _foreach and _first. default: c_array  */
 #define _all_comp(A, B, C, T, M)        _all_comp_shared(A, C, T, M(*_iter_all),         /* blank */       )
-#define _all_comp_be(A, B, C, T, x)     _all_comp_shared(A, C, T, ((*_iter_all) x (B)),  _expected = (B);  )
-#define _all_comp_match(A, B, C, T, F)  _all_comp_shared(A, C, T, F(*_iter_all, (B)),    _expected = (B);  )
+#define _all_comp_be(A, B, C, T, x)     _all_comp_shared(A, C, T, ((*_iter_all) x (B)),   _expected = (B);  )
+#define _all_comp_match(A, B, C, T, F)  _all_comp_shared(A, C, T, F(*_iter_all, (B), EQ), _expected = (B);  )
 
 #define _all(M, T_CON, T_EL, T_SEL)             FALSE; csBool _print_expected_value = FALSE;  _all_comp,       M,  ><, T_EL, _cspec_type_##T_SEL,  T_CON, ><, ><, ><
 #define _all_be(x, B, T_CON, T_EL, T_SEL)       FALSE; csBool _print_expected_value = TRUE;   _all_comp_be,    x,  B,  T_EL, _cspec_type_##T_SEL,  T_CON, ><, ><, ><
-#define _all_match(B, FN, T_CON, T_EL, T_SEL)   FALSE; csBool _print_expected_value = TRUE;   _all_comp_match, FN, B,  T_EL, T_SEL,                T_CON, ><, ><, ><
+#define _all_match(B, FN, T_CON, EQ, T_SEL)     FALSE; csBool _print_expected_value = TRUE;   _all_comp_match, FN, B,  EQ,   T_SEL,                T_CON, ><, ><, ><
 
 #define _all_select(M, T_CON, T_EL,_0,_1, T_SEL, ...)                       _all(M, T_CON, T_EL, T_SEL)
 #define _all_be_select(x, B, T_CON, T_EL,_0,_1,T_SEL, ...)                  _all_be(x, B, T_CON, T_EL, T_SEL)
-#define _all_match_select(B, T_CON, T_EL,FN,_a,_c,_e, P2,_m,_n,_o, P3, ...) _all_match(B, _pick_##P2(FN, _a, _c, 0), T_CON, T_EL, _pick_##P3(_cspec_type_def, _cspec_type_def, _cspec_type_sel, _cspec_type_sel))
+#define _all_match_select(B, T_CON, EQ, FN,_a,_c,_e, P2,_m,_n, P3, ...)     _all_match(B, _pick_##P2(FN, _a, _c, ><), T_CON, _pick_##P3(_match_fn, EQ, ><, ><), _cspec_type_def)
 
 #define _all_va(...)        _all_select(      __VA_ARGS__,          c_array, ><, sel, def, def)
 #define _all_be_va(...)     _all_be_select(   __VA_ARGS__/*op, B*/, c_array, ><, sel, def, def)
 #if CSPEC_USE_DEDUCTION == 0
 # define _all_match_va(...)  _all_match_select(__VA_ARGS__/*B*/,     c_array, ><, _match_fn, 0, 2, 1, 0, 3, 2, 1, 0)
 #else
-# define _all_match_fn_setup(A, B) FALSE; CSPEC_MATCH_SETUP(A, B, _match_fn)
-# define _all_match_va(...)  _all_match_select(__VA_ARGS__/*B*/,     c_array, ><, _all_match_fn_setup, 0, 2, 1, 0, 3, 2, 1, 0)
+# define _all_match_fn_setup(A, B, EQ) FALSE; CSPEC_MATCH_SETUP(A, B, EQ)
+# define _all_match_va(...)  _all_match_select(__VA_ARGS__/*B*/,     c_array, ><, _all_match_fn_setup, 0, 2, 1, 0, 1, 0, 0)
 #endif
 
 /* Output string generators for when providing a specific function to match.  */

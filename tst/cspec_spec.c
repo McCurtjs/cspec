@@ -498,6 +498,11 @@ describe(container_matchers) {
 
       it("contains only positive values") {
         expect(arr to all(be_positive, c_array));
+
+        int check_value = 2;
+        expect(arr to all_match(check_value, c_array, THE_MATCHER_FUNCTION));
+        expect(arr to all_match(COMPARISON_VARIABLE, CONTAINER_TYPE), ELEMENT_TYPE);
+        expect(arr to all_match(check_value, c_array), int);
 #if 0
         expect(arr to all(be_positive)); // type deduction, auto c_array
         expect(arr to all(be_positive, c_array)); // type deduction, explicit container type
@@ -564,13 +569,14 @@ describe(container_matchers) {
       it("contains at least one value within 2 of 8") {
         expect(arr to not all(not be_within(2 of 8), c_array, int));
       }
-      /*
+
 #define be_less_than(A) (A < 5)
       it("does a piecewise composition against another array") {
         int exp[] = { 6, 10, 14 };
         expect(arr to all(be_less_than, c_array, int));
       }
 
+      /*
       it("does a piecewise comparison using the function matcher shorthand (macro)") {
         int exp[] = { 6, 10, 14 };
         expect(arr to all_match(exp[n], be_less_than, c_array, int));
