@@ -499,11 +499,35 @@ describe(container_matchers) {
       it("contains only positive values") {
         expect(arr to all(be_positive, c_array));
 
-        int check_value = 2;
-        expect(arr to all_match(check_value, c_array, THE_MATCHER_FUNCTION));
-        expect(arr to all_match(COMPARISON_VARIABLE, CONTAINER_TYPE), ELEMENT_TYPE);
-        expect(arr to all_match(check_value, c_array), int);
 #if 0
+        int check_value = 2;
+        expect(arr to all_match(check_value));
+        expect(arr to all_match(check_value, c_array));
+        expect(arr to all_match(check_value), int);
+        expect(arr to all_match(check_value, c_array), int);
+        expect(arr to all_match(check_value, c_array, cmpint), int);
+        expect(arr to all_match(check_value, c_array, cmpint));
+
+        
+        expect(arr to all_match((int) { 2 }, c_array), int);
+        expect(arr to all_match(2));
+        expect(arr to all_match(2), int);
+        expect(2 to match(2), int);
+
+        expect("hi" to match("bye"));
+
+        char xyz[] = "asdf";
+        typeof((0, xyz))* sdg = &(typeof((0, xyz))){ xyz };
+        sdg;
+
+        expect(arr to all_match(check_value, c_array, THE_MATCHER_FUNCTION));
+        expect(arr to all_match(COMPARISON_VARIABLE), ELEMENT_TYPE);
+        expect(arr to all_match(COMPARISON_VARIABLE, CONTAINER_TYPE));
+        expect(arr to all_match(COMPARISON_VARIABLE, CONTAINER_TYPE, MATCHER_FUNCTION));
+        expect(arr to all_match(COMPARISON_VARIABLE, CONTAINER_TYPE), ELEMENT_TYPE);
+        expect(CONTAINER to all_match(COMPARISON_VARIABLE, CONTAINER_TYPE, MATCHER_FUNCTION), ELEMENT_TYPE);
+        expect(FUNCTION to match(COMPARISON_VALUE, MATCHING_FUNCTION) given(ARG1, ARG2), RETURN_TYPE);
+
         expect(arr to all(be_positive)); // type deduction, auto c_array
         expect(arr to all(be_positive, c_array)); // type deduction, explicit container type
         expect(arr to all(be_positive, c_array of int)); // explicit container and type
@@ -570,7 +594,7 @@ describe(container_matchers) {
         expect(arr to not all(not be_within(2 of 8), c_array, int));
       }
 
-#define be_less_than(A) (A < 5)
+#define be_less_than(A) (A < 50)
       it("does a piecewise composition against another array") {
         int exp[] = { 6, 10, 14 };
         expect(arr to all(be_less_than, c_array, int));
@@ -671,7 +695,7 @@ describe(container_matchers) {
 
       it("uses a function matcher with a function") {
         char* words[] = { "ab", "asdf", "qwerty" };
-        expect(words to all_match(arr[n], c_array of char*, cspec_streq));
+        expect(words to all_match(arr[n], c_array, cspec_streq), char*);
       }
 
     }

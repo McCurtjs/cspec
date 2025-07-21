@@ -1271,24 +1271,22 @@ void cpyptr(void* dst, const void* src, csSize size);
 /*    should print: "expected container to all_be( > , x)"                    */
 /*                  "but found -1 on iteration 4         "                    */
 /*                  "comparing 12                        "                    */
-#define _cspec_fail_all(S, T) {                                                \
+#define _cspec_fail_all(S, Ts) {                                               \
   _cspec_log(2, __LINE__, NULL, "expected "S);                                 \
   if (_pvalue) {                                                               \
-    csFmtVar* _param_found = _cspec_fvar((void*)_pvalue, _pvalue, #T);         \
+    csFmtVar* _param_found = _cspec_fvar((void*)_pvalue, _pvalue, Ts);         \
     csFmtVar* _param_index = _cspec_fvar(&_index, csUint, "uint");             \
-    if (_print_expected_value) {                                               \
-      _cspec_log_fmt(                                                          \
-        2, 0, "but found {} on iteration {}\ncomparing {}",                    \
-        _param_found, _param_index, _cspec_fvar(&_expected, _expected, #T)     \
-      );                                                                       \
-    } else {                                                                   \
-      _cspec_log_fmt(                                                          \
-        2, 0, "but found {} on iteration {}",                                  \
-        _param_found, _param_index                                             \
-      );                                                                       \
-    }                                                                          \
-    return;                                                                    \
+    _cspec_log_fmt(                                                            \
+      2, 0, "but found {} on iteration {}",                                    \
+      _param_found, _param_index                                               \
+    );                                                                         \
   }                                                                            \
+  if (_print_expected_value) {                                                 \
+    _cspec_log_fmt(                                                            \
+      2, 0, "comparing {}", _cspec_fvar(&_expected, _expected, Ts)             \
+    );                                                                         \
+  }                                                                            \
+  if (_pvalue) return;                                                         \
 }                                                                           /**/
 
 /* Failure output for basic expression forms like `expect(a , == , b)`        */
@@ -1364,7 +1362,7 @@ void cpyptr(void* dst, const void* src, csSize size);
 # /*    should print: "expected x to be_positive"                             */
 # /*                  "received -4              "                             */
 # define _cspec_fail_comp(S) _cspec_fail_fmt(                                  \
-    "expected "S"%n\nreceived {}", _cspec_fvar(&_R, _R, _type_s(_R))           \
+    "expected "S"%n\nreceived {}", _cspec_fvar(&_R, _R, _type_s((0,_R)))       \
   )                                                                         /**/
 #endif
 
@@ -1398,7 +1396,7 @@ void cpyptr(void* dst, const void* src, csSize size);
 # define _cspec_fail_match(A, B, Ta, Tb, U, n) _cspec_fail_fmt(                \
     "expected "#A" to {}match "#B U "%n\nvalue 1: {}\nvalue 2: {}",            \
     _cspec_fvar(n ? "not " : "", char*, "c str"),                              \
-    _cspec_fvar(_R, A, Ta), _cspec_fvar(_B, B, Tb)                             \
+    _cspec_fvar(_R, _R, Ta), _cspec_fvar(_B, _B, Tb)                           \
   )                                                                         /**/
 #endif
 
@@ -1464,7 +1462,8 @@ void cpyptr(void* dst, const void* src, csSize size);
     _cspec_fail_fmt(                                                           \
       "expected X "#x" "#B" where X = "#F#P"%n\n"                              \
       "received {} "#x" {}" _param_fn_str P,                                   \
-      _cspec_fvar(&_R, _R, _type_s(_R)), _cspec_fvar(&_B, B, _type_s(_B))      \
+      _cspec_fvar(&_R, _R, _type_s(_R)), _cspec_fvar(&_B, B, _type_s(_B)),     \
+      _param_fn_arg P 0                                                        \
     );                                                                         \
   }                                                                         /**/
 #
@@ -1487,6 +1486,23 @@ void cpyptr(void* dst, const void* src, csSize size);
     );                                                                         \
   }                                                                         /**/
 #
+#endif
+
+#if CSPEC_USE_DEDUCTION <= 1
+# /* Type selector for 'all' statements.                                      */
+# /* + C99 and C11 Variant that uses default int                              */
+# define _cspec_type_def(A, C) int
+#else
+# /* Type selector for 'all' statements.                                      */
+# /* + C23 Variant                                                            */
+# /*                                                                          */
+# /* Used to resolve to either a given type (T), or to a deduced type based   */
+# /*    on the type of the items in the container                             */
+# /* If inferring from a container, the type is based on the output type of a */
+# /*    container_first() function that gets the first element in the object  */
+# /* The *_first function is assumed to have the same prefix as the foreach   */
+# /* If pre-C23 mode we can't infer a type, so if none is provided assume int */
+# define _cspec_type_def(A, C) typeof((0, (C##_first(A))))
 #endif
 
 /* Expect statement expansions and selector.                                  */
@@ -1523,27 +1539,14 @@ void cpyptr(void* dst, const void* src, csSize size);
 # define _expect_expr(S, A, x, B, ...)                  AUTO_DUP(_R , (A));   AUTO_DUP(_B , (B));                                             if (!(_R x _B))   _cspec_fail_typed(A, x, B, _type_s(_R), _type_s(_B))
 # define _expect_comp(S, A, M, ...)                     AUTO_DUP(_R , (A));                       csBool _test = M(_R);                       if (!_test)       _cspec_fail_comp(S)
 #endif
-#define _expect_all_type(S, A, F, M, B, E,_r, C, _, T)                                            csBool _test = F(A, B, C, T, M, E);         if (!_test)       _cspec_fail_all(S, T)
-// TODO: Remove R and shift 1?        v - it's always _cspec_type_def
-#define _expect_all(S, A, F, M, B, E, R, C, ...)                                                  csBool _test = F(A, B, C, R(A, C), M, E);   if (!_test)       _cspec_fail_all(S, T)
+#define _expect_all_type(S, A, F, M, B, E, C,_a,_b, T)                       csBool _test = F(A, B, C, T, M, E);                              if (!_test)       _cspec_fail_all(S, #T)
+#define _expect_all(S, A, F, M, B, E, C, ...)                                csBool _test = F(A, B, C, _cspec_type_def(A, C), M, E);          if (!_test)       _cspec_fail_all(S, _type_s(_expected))
 #define _expect_type2(S, A, x, B, T, t, ...)                   T _R = (A);           t _B = (B);                                              if (!(_R x _B))   _cspec_fail_typed(A, x, B, #T, #t)
 #define _expect_type1(S, A, x, B, T, ...)                      T _R = (A);           T _B = (B);                                              if (!(_R x _B))   _cspec_fail_typed(A, x, B, #T, #T)
 #define _expect_true(S, A, ...)                                                                                                               if (!(A))         cspec_fail("expected "S)
 
-#define _expect_select(S, U, V, W, X, Y, Z, C,_0,_1,_2, D,_4, T, F, ...) do { _cspec_test_expcount(); _expect##F(S, U, V, W, X, Y, Z, C, T, D); } while(0)
+#define _expect_select(S, U, V, W, X, Y, Z, P,_0,_1,_2, Tc,_4, Tf, F, ...) do { _cspec_test_expcount(); _expect##F(S, U, V, W, X, Y, Z, P, Tf, Tc); } while(0)
 #define _expect_va(S, ...) _expect_select(S, __VA_ARGS__, _fn_mtyp, _fn_mtch, _all_type, _all, _fn_expr, _fn_comp, _mtyp, _mtch, _type2, _type1, _expr, _comp, _true)
-
-/* Type selector for 'all' statements.                                        */
-/*                                                                            */
-/* Used to resolve to either a given type (T), or to a deduced type based on  */
-/*    the type of the items in the container                                  */
-/* If inferring from a container, the type is based on the output type of a   */
-/*    container_first() function that gets the first element in the object    */
-/* The *_first function is assumed to have the same prefix as the foreach     */
-/* If pre-C23 mode we can't infer a type, so if none is provided assume int   */
-#if CSPEC_USE_DEDUCTION > 1
-# define _cspec_type_def(A, C) typeof((0, (C##_first(A))))
-#endif
 
 /* Shared composition setup for expect(... to all(...)) variants.             */
 /*                                                                            */
@@ -1557,9 +1560,16 @@ void cpyptr(void* dst, const void* src, csSize size);
 /* T: the element type                                                        */
 /* EXPR: the test expression to compose with, such as fn call or expression   */
 /* EXPECTED: optional expression to store expected value for output           */
+/*                                                                            */
+/* Note: the "EXPECTED" value is set twice (once at the start of the loop,    */
+/*    and again when the test fails) because of the cases wehre the indexer   */
+/*    is used and the fail case may differ from the first one, and it's set   */
+/*    at the start to handle cases where a single value is used with `not`    */
+/*    and no matching value is found                                          */
 #define _all_comp_shared(A, C, T, EXPR, EXPECTED)                              \
   csBool _tmp = _test; long long _index = 0; void* _pvalue = NULL; T _expected;\
   T* C##_foreach_index(_iter_all, _loop_all, A) {                              \
+    if (_loop_all == 0) EXPECTED ;                                             \
     _test = EXPR;                                                              \
     if (!_test) {                                                              \
       _index = _loop_all;                                                      \
@@ -1582,25 +1592,25 @@ void cpyptr(void* dst, const void* src, csSize size);
 /*    T: the type of A                                                        */
 /*    R: type resolver that either picks an explicitly given type, or typeof  */
 /*    C: the container type prefix for _foreach and _first. default: c_array  */
-#define _all_comp(A, B, C, T, M)        _all_comp_shared(A, C, T, M(*_iter_all),         /* blank */       )
-#define _all_comp_be(A, B, C, T, x)     _all_comp_shared(A, C, T, ((*_iter_all) x (B)),   _expected = (B);  )
-#define _all_comp_match(A, B, C, T, F)  _all_comp_shared(A, C, T, F(*_iter_all, (B), EQ), _expected = (B);  )
+#define _all_comp(A, B, C, T, M, _)         _all_comp_shared(A, C, T, M(*_iter_all),         /* blank */       )
+#define _all_comp_be(A, B, C, T, x, _)      _all_comp_shared(A, C, T, ((*_iter_all) x (B)),   _expected = (B);  )
+#define _all_comp_match(A, B, C, T, F, EQ)  _all_comp_shared(A, C, T, F(*_iter_all, (B), EQ), _expected = (B);  )
 
-#define _all(M, T_CON, T_EL, T_SEL)             FALSE; csBool _print_expected_value = FALSE;  _all_comp,       M,  ><, T_EL, _cspec_type_##T_SEL,  T_CON, ><, ><, ><
-#define _all_be(x, B, T_CON, T_EL, T_SEL)       FALSE; csBool _print_expected_value = TRUE;   _all_comp_be,    x,  B,  T_EL, _cspec_type_##T_SEL,  T_CON, ><, ><, ><
-#define _all_match(B, FN, T_CON, EQ, T_SEL)     FALSE; csBool _print_expected_value = TRUE;   _all_comp_match, FN, B,  EQ,   T_SEL,                T_CON, ><, ><, ><
+#define _all(M, T_CON)                  FALSE; csBool _print_expected_value = FALSE;  _all_comp,       M,  ><, ><, T_CON, ><, ><, ><, ><
+#define _all_be(x, B, T_CON)            FALSE; csBool _print_expected_value = TRUE;   _all_comp_be,    x,  B,  ><, T_CON, ><, ><, ><, ><
+#define _all_match(B, FN, T_CON, T_EL)  FALSE; csBool _print_expected_value = TRUE;   _all_comp_match, FN, B,  T_EL, T_CON, ><, ><, ><, ><
 
-#define _all_select(M, T_CON, T_EL,_0,_1, T_SEL, ...)                       _all(M, T_CON, T_EL, T_SEL)
-#define _all_be_select(x, B, T_CON, T_EL,_0,_1,T_SEL, ...)                  _all_be(x, B, T_CON, T_EL, T_SEL)
-#define _all_match_select(B, T_CON, EQ, FN,_a,_c,_e, P2,_m,_n, P3, ...)     _all_match(B, _pick_##P2(FN, _a, _c, ><), T_CON, _pick_##P3(_match_fn, EQ, ><, ><), _cspec_type_def)
+#define _all_select(M, T_CON, ...)                                  _all(M, T_CON)
+#define _all_be_select(x, B, T_CON, ...)                            _all_be(x, B, T_CON)
+#define _all_match_select(B, T_CON, E, FN,_a,_c, P2,_m,_n, P3, ...) _all_match(B, _pick_##P2(FN, _a, _c, ><), T_CON, _pick_##P3(_match_fn, E, ><, ><))
 
-#define _all_va(...)        _all_select(      __VA_ARGS__,          c_array, ><, sel, def, def)
-#define _all_be_va(...)     _all_be_select(   __VA_ARGS__/*op, B*/, c_array, ><, sel, def, def)
+#define _all_va(...)        _all_select(      __VA_ARGS__,          c_array)
+#define _all_be_va(...)     _all_be_select(   __VA_ARGS__/*op, B*/, c_array)
 #if CSPEC_USE_DEDUCTION == 0
-# define _all_match_va(...)  _all_match_select(__VA_ARGS__/*B*/,     c_array, ><, _match_fn, 0, 2, 1, 0, 3, 2, 1, 0)
+# define _all_match_va(...)  _all_match_select(__VA_ARGS__/*B*/,     c_array, ><, _match_fn, 2, 1, 0, 1, 0, 0)
 #else
-# define _all_match_fn_setup(A, B, EQ) FALSE; CSPEC_MATCH_SETUP(A, B, EQ)
-# define _all_match_va(...)  _all_match_select(__VA_ARGS__/*B*/,     c_array, ><, _all_match_fn_setup, 0, 2, 1, 0, 1, 0, 0)
+# define _all_match_setup(A, B, EQ) FALSE; CSPEC_MATCH_SETUP(A, B, EQ)
+# define _all_match_va(...)  _all_match_select(__VA_ARGS__/*B*/,     c_array, ><, _all_match_setup, 2, 1, 0, 1, 0, 0)
 #endif
 
 /* Output string generators for when providing a specific function to match.  */

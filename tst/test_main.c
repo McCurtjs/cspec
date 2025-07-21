@@ -60,7 +60,7 @@ int main(int argc, char* argv[]) {
 
 # ifdef CSPEC_MSVC
   /* Test values for Visual Studio without having to modify properties */
-  argv = (char* []){ argv[0], "-snf", "matcher_spec.c:706" };
+  argv = (char* []){ argv[0], "-psf", "matcher_spec.c:687" };
   argc = 3;
 # endif
 
