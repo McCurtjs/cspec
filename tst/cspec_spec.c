@@ -497,7 +497,7 @@ describe(container_matchers) {
     context("tests succeed") {
 
       it("contains only positive values") {
-        expect(arr to all(be_positive, c_array));
+        expect(arr to all(be_positive, c_array), int);
 
 #if 0
         int check_value = 2;
@@ -596,7 +596,7 @@ describe(container_matchers) {
 
 #define be_less_than(A) (A < 50)
       it("does a piecewise composition against another array") {
-        int exp[] = { 6, 10, 14 };
+        // int exp[] = { 6, 10, 14 };
         expect(arr to all(be_less_than, c_array, int));
       }
 

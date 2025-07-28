@@ -279,8 +279,9 @@ describe(match) {
 
       it("will only compare by the raw pointer value") {
         const char* strings[] = { "str", "str" };
-        const char[] test = "str";
+        const char test[] = "str";
         expect(strings to not all_match(test));
+        // TODO: Need to disable the _expected value for all_match when the type is not explicitly provided.
       }
 
     }
@@ -328,6 +329,8 @@ describe(match) {
 
     it("compares the structs a bitwise match") {
       expect(arr to all_match(test_value), Doodad);
+      test_value.b = 45.3f;
+      expect(arr to not all_match(test_value, c_array, compare_doodads), Doodad);
     }
 
 #if CSPEC_USE_DEDUCTION >= 1
@@ -339,7 +342,7 @@ describe(match) {
         expect(arr to all_match(test_value, c_array));
         expect(arr to all_match(test_value, c_array), Doodad);
         expect(arr to all_match(test_value, c_array, compare_doodads));
-        expect(arr to not all_match(test_value, c_array, compare_doodads), Doodad);
+        expect(arr to all_match(test_value, c_array, compare_doodads), Doodad);
       }
 
     }

@@ -1131,7 +1131,6 @@ void cpyptr(void* dst, const void* src, csSize size);
 #define _cspec_fail_va(level, line, ...) do { _cspec_log_fmt(level, line, __VA_ARGS__); return; } while(0)
 #define _cspec_fail_fmt(...) _cspec_fail_va(2, __LINE__, __VA_ARGS__)
 
-
 #define _pick_0(a,b,c,d) a
 #define _pick_1(a,b,c,d) b
 #define _pick_2(a,b,c,d) c
@@ -1226,7 +1225,8 @@ void cpyptr(void* dst, const void* src, csSize size);
   _type_s_h(X, unsigned char), _type_s_h(X, unsigned short),      _type_s_h(X, unsigned int),                         \
   _type_s_h(X, unsigned long), _type_s_h(X, unsigned long long),  _type_s_h(X, float),  _type_s_h(X, double)          \
 )                                                                                                                  /**/
-#
+#else
+# define _type_s(X) "?"
 #endif
 
 /* Macro expander for dynamic argument lengths. This is used to build a list  */
@@ -1592,25 +1592,26 @@ void cpyptr(void* dst, const void* src, csSize size);
 /*    T: the type of A                                                        */
 /*    R: type resolver that either picks an explicitly given type, or typeof  */
 /*    C: the container type prefix for _foreach and _first. default: c_array  */
-#define _all_comp(A, B, C, T, M, _)         _all_comp_shared(A, C, T, M(*_iter_all),         /* blank */       )
-#define _all_comp_be(A, B, C, T, x, _)      _all_comp_shared(A, C, T, ((*_iter_all) x (B)),   _expected = (B);  )
-#define _all_comp_match(A, B, C, T, F, EQ)  _all_comp_shared(A, C, T, F(*_iter_all, (B), EQ), _expected = (B);  )
+#define _all_comp(A, B, C, T, M, _, ...)         _all_comp_shared(A, C, T, M(*_iter_all),         /* blank */        )
+#define _all_comp_be(A, B, C, T, x, _, ...)      _all_comp_shared(A, C, T, ((*_iter_all) x (B)),   _expected = (B);  )
+#define _all_comp_match(A, B, C, T, F, EQ, ...)  _all_comp_shared(A, C, T, F(*_iter_all, (B), EQ), _expected = (B);  )
 
-#define _all(M, T_CON)                  FALSE; csBool _print_expected_value = FALSE;  _all_comp,       M,  ><, ><, T_CON, ><, ><, ><, ><
-#define _all_be(x, B, T_CON)            FALSE; csBool _print_expected_value = TRUE;   _all_comp_be,    x,  B,  ><, T_CON, ><, ><, ><, ><
-#define _all_match(B, FN, T_CON, T_EL)  FALSE; csBool _print_expected_value = TRUE;   _all_comp_match, FN, B,  T_EL, T_CON, ><, ><, ><, ><
+#define _all(M, T_CON)              FALSE; csBool _print_expected_value = FALSE; _all_comp,       M,                ><, ><,   T_CON, ><, ><, ><, ><
+#define _all_be(x, B, T_CON)        FALSE; csBool _print_expected_value = TRUE;  _all_comp_be,    x,                B,  ><,   T_CON, ><, ><, ><, ><
+#define _all_match(B, T_CON, T_EL)  FALSE; csBool _print_expected_value = TRUE;  _all_comp_match, _all_match_setup, B,  T_EL, T_CON, ><, ><, ><, ><
 
-#define _all_select(M, T_CON, ...)                                  _all(M, T_CON)
-#define _all_be_select(x, B, T_CON, ...)                            _all_be(x, B, T_CON)
-#define _all_match_select(B, T_CON, E, FN,_a,_c, P2,_m,_n, P3, ...) _all_match(B, _pick_##P2(FN, _a, _c, ><), T_CON, _pick_##P3(_match_fn, E, ><, ><))
+#define _all_select(M, T_CON, ...)                    _all(M, T_CON)
+#define _all_be_select(x, B, T_CON, ...)              _all_be(x, B, T_CON)
+#define _all_match_select(B, T_CON, E,_m,_n, P3, ...) _all_match(B, T_CON, _pick_##P3(_match_fn, E, ><, ><))
 
 #define _all_va(...)        _all_select(      __VA_ARGS__,          c_array)
 #define _all_be_va(...)     _all_be_select(   __VA_ARGS__/*op, B*/, c_array)
+#define _all_match_va(...)  _all_match_select(__VA_ARGS__/*B*/,     c_array, >< ,1, 0, 0)
+
 #if CSPEC_USE_DEDUCTION == 0
-# define _all_match_va(...)  _all_match_select(__VA_ARGS__/*B*/,     c_array, ><, _match_fn, 2, 1, 0, 1, 0, 0)
+# define _all_match_setup(A, B, EQ) EQ(A, B)
 #else
 # define _all_match_setup(A, B, EQ) FALSE; CSPEC_MATCH_SETUP(A, B, EQ)
-# define _all_match_va(...)  _all_match_select(__VA_ARGS__/*B*/,     c_array, ><, _all_match_setup, 2, 1, 0, 1, 0, 0)
 #endif
 
 /* Output string generators for when providing a specific function to match.  */

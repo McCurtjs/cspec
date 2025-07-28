@@ -86,14 +86,14 @@ describe(cspec_malloc_and_free) {
   it("allocates non-zeroed memory by default") {
     int* buffer = cspec_malloc(sizeof(int) * 10);
     expect(buffer to not be_null);
-    expect(c_array(buffer, 10, int) to all(not be_zero));
+    expect(c_array(buffer, 10, int) to all(not be_zero), int);
     cspec_free(buffer);
   }
 
   it("zeroes out memory allocated with calloc") {
     int* buffer = cspec_calloc(10, sizeof(int));
     expect(buffer to not be_null);
-    expect(c_array(buffer, 10, int) to all(be_zero));
+    expect(c_array(buffer, 10, int) to all(be_zero), int);
     cspec_free(buffer);
   }
 

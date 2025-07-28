@@ -911,8 +911,8 @@ describe(matcher_fn_match_failed) {
 
   it("should expect result of cspec_ishex to match value when given('x')") {
     int value = 10;
-    int x = 'x';
-    expect(cspec_ishex to match(value) given('x'));
+    // int x = 'x';
+    expect(cspec_ishex to match(value) given('x'), int);
   }
 
 }
