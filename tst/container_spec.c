@@ -110,26 +110,45 @@ describe(all) {
 
   }
 
-#if CSPEC_USE_DEDUCTION >= 1
-  context("validating each possible composition form for C23 deduction") {
+  context("validating each possible composition form") {
 
     int arr[] = { 3, 5, 7, 9 };
 
-    it("compiles with any supported parameter set") {
-      expect(arr to all(be_positive));
+    it("compiles with explicitly provided types") {
       expect(arr to all(be_positive), int);
-      expect(arr to all(be_positive, c_array));
       expect(arr to all(be_positive, c_array), int);
     }
 
-  }
+#if CSPEC_USE_DEDUCTION > 1
+    it("compiles with deduced types in C23") {
+      expect(arr to all(be_positive));
+      expect(arr to all(be_positive, c_array));
+    }
 #endif
+  }
 
 }
 
 
 
 describe(all_fail) {
+
+  expect(to_fail);
+
+  int arr[] = { 3, 5, -7, 9 };
+  csBool bools[] = { TRUE, FALSE };
+
+  it("should find -7 on iteration 2") {
+    expect(arr to all(be_positive, c_array), int);
+  }
+
+  it("should find 3 on iteration 0") {
+    expect(arr to all(be_true, c_array), int);
+  }
+
+  it("checks for truthiness (any non-0 value)") {
+    expect(bools to all(be_true, c_array), csBool);
+  }
 
 }
 
@@ -193,18 +212,21 @@ describe(expr) {
 
   }
 
-#if CSPEC_USE_DEDUCTION >= 1
-  context("validating each possible composition form for C23 deduction") {
+  context("validating each possible composition") {
 
-    it("compiles with any supported parameter set") {
-      expect(arr to all_be( > , 1));
+    it("compiles with explicitly provided types") {
       expect(arr to all_be( > , 1), int);
-      expect(arr to all_be( > , 1, c_array));
       expect(arr to all_be( > , 1, c_array), int);
     }
 
-  }
+#if CSPEC_USE_DEDUCTION > 1
+    it("compiles with deduced types in C23") {
+      expect(arr to all_be( > , 1));
+      expect(arr to all_be( > , 1, c_array));
+    }
 #endif
+
+  }
 
 }
 
@@ -251,24 +273,34 @@ describe(match) {
       expect(arr to not all_match(test_value, c_array, incomparable), int);
     }
 
+    /* This is no longer true, because the _expected value can't be           */
+    /*    type-deduced. A variant of `all` matchers could probably be made    */
+    /*    to work without it (or with generic printing), but has been too     */
+    /*    tedious to implement so far, with little benefit vs just requiring  */
+    /*    the user to provide the explicit type.                              */
+    /*
     it("doens't require the type parameter for C99 because it relies on sizeof") {
       expect(arr to all_match(test_value));
     }
+    */
 
-#if CSPEC_USE_DEDUCTION >= 1
-    context("validating each possible composition form for C23 deduction") {
+    context("validating each possible composition form") {
 
-      it("compiles with any supported parameter set") {
-        expect(arr to all_match(test_value));
+      it("compiles with explicitly provided types") {
         expect(arr to all_match(test_value), int);
-        expect(arr to all_match(test_value, c_array));
         expect(arr to all_match(test_value, c_array), int);
-        expect(arr to all_match(test_value, c_array, compare_ints));
         expect(arr to all_match(test_value, c_array, compare_ints), int);
       }
 
-    }
+#if CSPEC_USE_DEDUCTION > 1
+      it("compiles with deduced types in C23") {
+        expect(arr to all_match(test_value));
+        expect(arr to all_match(test_value, c_array));
+        expect(arr to all_match(test_value, c_array, compare_ints));
+      }
 #endif
+
+    }
 
   }
 
@@ -280,8 +312,7 @@ describe(match) {
       it("will only compare by the raw pointer value") {
         const char* strings[] = { "str", "str" };
         const char test[] = "str";
-        expect(strings to not all_match(test));
-        // TODO: Need to disable the _expected value for all_match when the type is not explicitly provided.
+        expect(strings to not all_match(test), const char*);
       }
 
     }
@@ -302,23 +333,26 @@ describe(match) {
     }
 #endif
 
-#if CSPEC_USE_DEDUCTION >= 1
-    context("validating each possible composition form for C23 deduction") {
+    context("validating each possible composition form") {
 
-      const char* arr[] = { "str", "str" };
+      const char* arr[] = { "str", "abc" };
       const char test_value[] = "str";
 
-      it("compiles with any supported parameter set") {
-        expect(arr to all_match(test_value));
-        expect(arr to all_match(test_value), const char*);
-        expect(arr to all_match(test_value, c_array));
-        expect(arr to all_match(test_value, c_array), const char*);
-        expect(arr to all_match(test_value, c_array, cspec_streq));
-        expect(arr to all_match(test_value, c_array, cspec_streq), const char*);
+      it("compiles with explicitly provided types") {
+        expect(arr to not all_match(test_value), const char*);
+        expect(arr to not all_match(test_value, c_array), const char*);
+        expect(arr to not all_match(test_value, c_array, cspec_streq), const char*);
       }
 
-    }
+#if CSPEC_USE_DEDUCTION > 1
+      it("compiles using deduced types in C23") {
+        expect(arr to not all_match(test_value));
+        expect(arr to not all_match(test_value, c_array));
+        expect(arr to not all_match(test_value, c_array, cspec_streq));
+      }
 #endif
+
+    }
 
   }
 
@@ -330,23 +364,40 @@ describe(match) {
     it("compares the structs a bitwise match") {
       expect(arr to all_match(test_value), Doodad);
       test_value.b = 45.3f;
+      expect(arr to not all_match(test_value, c_array), Doodad);
+    }
+
+    it("compares the structs using a provided matching function") {
+      expect(arr to all_match(test_value), Doodad);
+      expect(arr to all_match(test_value, c_array, compare_doodads), Doodad);
+
+      /* The provided matcher function doesn't check the values of `b` */
+      test_value.b = 45.3f;
+      expect(arr to not all_match(test_value), Doodad);
+      expect(arr to all_match(test_value, c_array, compare_doodads), Doodad);
+
+      test_value.x = 7;
+      expect(arr to not all_match(test_value), Doodad);
       expect(arr to not all_match(test_value, c_array, compare_doodads), Doodad);
     }
 
-#if CSPEC_USE_DEDUCTION >= 1
-    context("validating each possible composition form for C23 deduction") {
+    context("validating each possible composition form") {
 
-      it("compiles with any supported parameter set") {
-        expect(arr to all_match(test_value));
+      it("compiles with explicitly provided types") {
         expect(arr to all_match(test_value), Doodad);
-        expect(arr to all_match(test_value, c_array));
         expect(arr to all_match(test_value, c_array), Doodad);
-        expect(arr to all_match(test_value, c_array, compare_doodads));
         expect(arr to all_match(test_value, c_array, compare_doodads), Doodad);
       }
 
-    }
+#if CSPEC_USE_DEDUCTION > 1
+      it("compiles with deduced types in C23") {
+        expect(arr to all_match(test_value));
+        expect(arr to all_match(test_value, c_array));
+        expect(arr to all_match(test_value, c_array, compare_doodads));
+      }
 #endif
+
+    }
 
   }
 

@@ -26,22 +26,24 @@
 
 /* Declare list of test suites */
 
+extern TestSuite tests_cspec;
+extern TestSuite tests_expr;
+extern TestSuite tests_cspec_matchers;
+extern TestSuite tests_cspec_containers;
 extern TestSuite tests_libcs;
 extern TestSuite tests_cspec_out;
 extern TestSuite tests_cspec_log;
 extern TestSuite tests_cspec_mem;
-extern TestSuite tests_cspec_matchers;
-extern TestSuite tests_cspec_containers;
-extern TestSuite tests_cspec;
 
 TestSuite* test_suites[] = {
+  &tests_cspec,
+  &tests_expr,
+  &tests_cspec_matchers,
+  &tests_cspec_containers,
   &tests_libcs,
   &tests_cspec_out,
   &tests_cspec_log,
   &tests_cspec_mem,
-  &tests_cspec_matchers,
-  &tests_cspec_containers,
-  &tests_cspec
 };
 
 #ifndef __WASM__
@@ -60,8 +62,8 @@ int main(int argc, char* argv[]) {
 
 # ifdef CSPEC_MSVC
   /* Test values for Visual Studio without having to modify properties */
-  argv = (char* []){ argv[0], "-psf", "matcher_spec.c:687" };
-  argc = 3;
+  argv = (char* []){ argv[0], "-ps", "cspec_spec.c:142" };
+  argc = 2;
 # endif
 
   cspec_opt_print_line = printer;

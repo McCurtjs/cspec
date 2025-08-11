@@ -93,13 +93,14 @@ esac
 sources_test="
   cspec.c
   tst/test_main.c
+  tst/cspec_spec.c
+  tst/expr_spec.c
+  tst/matcher_spec.c
+  tst/container_spec.c
   tst/libcs_spec.c
   tst/out_spec.c
   tst/log_spec.c
   tst/mem_spec.c
-  tst/cspec_spec.c
-  tst/matcher_spec.c
-  tst/container_spec.c
 "
 
 # Run build based on target type

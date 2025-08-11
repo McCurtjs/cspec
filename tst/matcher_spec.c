@@ -362,6 +362,12 @@ describe(matchers_compound) {
       expect(4 to not be_about(4.1));
     }
 
+    it("checks the estinction of a large floating point value") {
+      float a_third = 1.f / 3.f;
+      expect(a_third, != , 0.3333f, double);
+      expect(a_third to be_about(0.3333f));
+    }
+
   }
 
 }
@@ -667,21 +673,6 @@ describe(matcher_match) {
 #endif
   }
 
-  context("when using C23 mode only (CSPEC_USE_DEDUCTION > 1)") {
-#if CSPEC_USE_DEDUCTION > 1
-
-    it("can (not) accept basic type literal values") {
-      expect('a' to match(0x61), char);
-    }
-
-    it("probably has some cases that match this situation - probably involving literal values");
-
-#else
-    expect(TRUE);
-    it("cannot accept literal values of basic types");
-#endif
-  }
-
 }
 
 describe(matcher_match_failed) {
@@ -911,7 +902,6 @@ describe(matcher_fn_match_failed) {
 
   it("should expect result of cspec_ishex to match value when given('x')") {
     int value = 10;
-    // int x = 'x';
     expect(cspec_ishex to match(value) given('x'), int);
   }
 

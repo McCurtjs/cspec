@@ -255,7 +255,6 @@ describe(cspec_strncpy) {
     cspec_strncpy(dst, test, 20u);
 
     expect(dst to match(test, cspec_streq));
-    //expect(dst to match(test));
     expect(cspec_streq to be_true given(dst, test));
   }
 

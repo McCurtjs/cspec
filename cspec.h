@@ -1146,17 +1146,31 @@ void cpyptr(void* dst, const void* src, csSize size);
   const void* _A = &(A); const void* _B = &(B);                                \
   _test ^= cspec_memeq(_A, _B, sizeof(A), sizeof(B))                        /**/
 #else
+#
+# ifdef CSPEC_CUSTOM_MATCH_FNS
+#   define _CSPEC_CUSTOM_MATCH_FN_C ,
+# else
+#   define CSPEC_CUSTOM_MATCH_FNS
+#   define _CSPEC_CUSTOM_MATCH_FN_C
+# endif
+#
 # define _match_fn(A, B) FALSE;                                                \
     _test ^= _Generic((A), CSPEC_CUSTOM_MATCH_FNS _CSPEC_CUSTOM_MATCH_FN_C     \
       char*: _cspec_streq, const char*: _cspec_streq, default: cspec_memeq     \
     ) (_R, _B, sizeof(A), sizeof(B))                                        /**/
 #
+# /* Because of how arrays work (and by extension string literals), avoid     */
+# /*    using the address-of on strings so they can correctly match against   */
+# /*    character arrays. Yes, this is annoying.                              */
 # define AUTO_RES(NAME, VALUE) const void* NAME = _Generic((VALUE),            \
     char*: VALUE, const char*: VALUE, default: &VALUE                          \
   )                                                                         /**/
 #
+# /* The (void) statements for the temp vars are to avoid the case where F is */
+# /*    given as a specific comparison function, and the AUTO_RES values      */
+# /*    don't get used.                                                       */
 # define CSPEC_MATCH_SETUP(A, B, F)                                            \
-  AUTO_RES(_R, (A)); AUTO_RES(_B, (B)); _test = F(A, B)                     /**/
+  AUTO_RES(_R, (A)); AUTO_RES(_B, (B)); (void)_R; (void)_B; _test = F(A, B) /**/
 #
 # /* Special case of an `auto` copy that can copy a literal value, variable,  */
 # /*    struct, or array into a byte array                                    */
@@ -1168,6 +1182,9 @@ void cpyptr(void* dst, const void* src, csSize size);
   ) ( NAME, (0,VALUE), sizeof((0,VALUE)) )                                                                                 /**/
 #endif
 
+/* Set up AUTO_DUP based on the version of C we're using. AUTO_DUP simply     */
+/*    creates a copy of a variable in some form. This will either be with the */
+/*    auto or typeof keywords in C23, or copies into arrays in older versions */
 #if CSPEC_USE_DEDUCTION >= 3
 # define AUTO_DUP(NAME, VALUE) auto NAME = VALUE
 #elif CSPEC_USE_DEDUCTION == 2
@@ -1187,13 +1204,6 @@ void cpyptr(void* dst, const void* src, csSize size);
 # else
 #   define CSPEC_CUSTOM_TYPES
 #   define _CSPEC_CUSTOM_TYPE_C
-# endif
-#
-# ifdef CSPEC_CUSTOM_MATCH_FNS
-#   define _CSPEC_CUSTOM_MATCH_FN_C ,
-# else
-#   define CSPEC_CUSTOM_MATCH_FNS
-#   define _CSPEC_CUSTOM_MATCH_FN_C
 # endif
 #
 # if CSPEC_USE_DEDUCTION == 1
@@ -1226,6 +1236,9 @@ void cpyptr(void* dst, const void* src, csSize size);
   _type_s_h(X, unsigned long), _type_s_h(X, unsigned long long),  _type_s_h(X, float),  _type_s_h(X, double)          \
 )                                                                                                                  /**/
 #else
+# /* C99 can't use _Generic for type deduction, so instead we'll just act     */
+# /*    like we're confused. This is ok though, as the printer will just      */
+# /*    interpret it as an "unknown type" and print the binary value instead. */
 # define _type_s(X) "?"
 #endif
 
@@ -1519,8 +1532,9 @@ void cpyptr(void* dst, const void* src, csSize size);
 # define _expect_comp(S, A, M, ...)                                                               csBool _test = M(A);                        if (!_test)       cspec_fail("expected "S)
 #endif
 #if CSPEC_USE_DEDUCTION <= 1
+# define _expect_all(S, A, F, M, B, E, C, ...)          _deduct_warn("expect(<container> to all(...), <type>");             (void)A;                            cspec_fail("C23 required for 'all' matcher without providing explicit type")
 # define _expect_fn_comp(S, F, M, P, ...)                                                         csBool _test = M((F P));                    if (!_test)       cspec_fail("expected "S)
-# define _expect_fn_mtch(S, F, n, M, B, u, _, P, ...)   _deduct_warn("expect("#F" to match("#B") given"#P", <type>)");      (void)B;                            cspec_fail("C23 required for 'function match' matcher without providing explicit type");
+# define _expect_fn_mtch(S, F, n, M, B, u, _, P, ...)   _deduct_warn("expect("#F" to match("#B") given"#P", <type>)");      (void)B;                            cspec_fail("C23 required for 'function match' matcher without providing explicit type")
 # define _expect_fn_expr(S, F, x, B, P, ...)                                                      csBool _test = ((F P) x (B));               if (!_test)       cspec_fail("expected X "#x" "#B" where X == "#F#P)
 #endif
 #if CSPEC_USE_DEDUCTION == 1
@@ -1533,6 +1547,7 @@ void cpyptr(void* dst, const void* src, csSize size);
 # define _expect_mtch(S, A, n, F, B, u, ...)                                                      csBool _test; CSPEC_MATCH_SETUP(A, B, F);   if (!_test ^ n)   _cspec_fail_match(A, B, _type_s(A), _type_s(B), u(#F), n)
 #endif
 #if CSPEC_USE_DEDUCTION > 1
+# define _expect_all(S, A, F, M, B, E, C, ...)                               csBool _test = F(A, B, C, _cspec_type_def(A, C), M, E);          if (!_test)       _cspec_fail_all(S, _type_s(_expected))
 # define _expect_fn_comp(S, F, M, P, ...)               AUTO_DUP(_R , (F P));                     csBool _test = M(_R);                       if (!_test)       _cspec_fail_fn_comp(S, P)
 # define _expect_fn_mtch(S, F, n, M, B, u, _, P, ...)   AUTO_DUP(_J , (F P)); AUTO_DUP(_S , (B)); csBool _test; CSPEC_MATCH_SETUP(_J, _S, M); if (!_test ^ n)   _cspec_fail_fn_match(F, M, B, P, u, n, _type_s(_J), _R, _type_s(_S), _B)
 # define _expect_fn_expr(S, F, x, B, P, ...)            AUTO_DUP(_R , (F P)); AUTO_DUP(_B , (B));                                             if (!(_R x _B))   _cspec_fail_fn_expr(F, x, B, P)
@@ -1540,13 +1555,23 @@ void cpyptr(void* dst, const void* src, csSize size);
 # define _expect_comp(S, A, M, ...)                     AUTO_DUP(_R , (A));                       csBool _test = M(_R);                       if (!_test)       _cspec_fail_comp(S)
 #endif
 #define _expect_all_type(S, A, F, M, B, E, C,_a,_b, T)                       csBool _test = F(A, B, C, T, M, E);                              if (!_test)       _cspec_fail_all(S, #T)
-#define _expect_all(S, A, F, M, B, E, C, ...)                                csBool _test = F(A, B, C, _cspec_type_def(A, C), M, E);          if (!_test)       _cspec_fail_all(S, _type_s(_expected))
 #define _expect_type2(S, A, x, B, T, t, ...)                   T _R = (A);           t _B = (B);                                              if (!(_R x _B))   _cspec_fail_typed(A, x, B, #T, #t)
 #define _expect_type1(S, A, x, B, T, ...)                      T _R = (A);           T _B = (B);                                              if (!(_R x _B))   _cspec_fail_typed(A, x, B, #T, #T)
 #define _expect_true(S, A, ...)                                                                                                               if (!(A))         cspec_fail("expected "S)
 
 #define _expect_select(S, U, V, W, X, Y, Z, P,_0,_1,_2, Tc,_4, Tf, F, ...) do { _cspec_test_expcount(); _expect##F(S, U, V, W, X, Y, Z, P, Tf, Tc); } while(0)
 #define _expect_va(S, ...) _expect_select(S, __VA_ARGS__, _fn_mtyp, _fn_mtch, _all_type, _all, _fn_expr, _fn_comp, _mtyp, _mtch, _type2, _type1, _expr, _comp, _true)
+
+/* Idea: how could param-list arguments be used to reduce the jump count?     */
+/*    ie, converting `expect(A, F)` to F(A), but `expect(A, F, B)` to F(A, B) */
+/*    by using `(A)` and `(A, B)` as separate arguments and `pick_`ing them?  */
+/* If I also embraced using constants for basic comparisons, this could also  */
+/*    potentailly allow for removing the parens in most of the cases, ie:     */
+/*    `expect(var to be == 3)` or `expect(arr to all be > 7)`                 */
+/*    each sub-expression (be, all, match) would just need its own end comma. */
+/*    If needed, a comma could be allowed, ie, `expect(var to be < , x)`      */
+
+
 
 /* Shared composition setup for expect(... to all(...)) variants.             */
 /*                                                                            */
@@ -1567,9 +1592,8 @@ void cpyptr(void* dst, const void* src, csSize size);
 /*    at the start to handle cases where a single value is used with `not`    */
 /*    and no matching value is found                                          */
 #define _all_comp_shared(A, C, T, EXPR, EXPECTED)                              \
-  csBool _tmp = _test; long long _index = 0; void* _pvalue = NULL; T _expected;\
+  csBool _tmp = _test; long long _index = 0; void* _pvalue = NULL;             \
   T* C##_foreach_index(_iter_all, _loop_all, A) {                              \
-    if (_loop_all == 0) EXPECTED ;                                             \
     _test = EXPR;                                                              \
     if (!_test) {                                                              \
       _index = _loop_all;                                                      \
@@ -1592,9 +1616,9 @@ void cpyptr(void* dst, const void* src, csSize size);
 /*    T: the type of A                                                        */
 /*    R: type resolver that either picks an explicitly given type, or typeof  */
 /*    C: the container type prefix for _foreach and _first. default: c_array  */
-#define _all_comp(A, B, C, T, M, _, ...)         _all_comp_shared(A, C, T, M(*_iter_all),         /* blank */        )
-#define _all_comp_be(A, B, C, T, x, _, ...)      _all_comp_shared(A, C, T, ((*_iter_all) x (B)),   _expected = (B);  )
-#define _all_comp_match(A, B, C, T, F, EQ, ...)  _all_comp_shared(A, C, T, F(*_iter_all, (B), EQ), _expected = (B);  )
+#define _all_comp(A, B, C, T, M, _, ...)         T _expected; _all_comp_shared(A, C, T, M(*_iter_all),         /* blank */        )
+#define _all_comp_be(A, B, C, T, x, _, ...)      T _expected; _all_comp_shared(A, C, T, ((*_iter_all) x (B)),   _expected = (B);  )
+#define _all_comp_match(A, B, C, T, F, EQ, ...)  T _expected; _all_comp_shared(A, C, T, F(*_iter_all, (B), EQ), _expected = (B);  )
 
 #define _all(M, T_CON)              FALSE; csBool _print_expected_value = FALSE; _all_comp,       M,                ><, ><,   T_CON, ><, ><, ><, ><
 #define _all_be(x, B, T_CON)        FALSE; csBool _print_expected_value = TRUE;  _all_comp_be,    x,                B,  ><,   T_CON, ><, ><, ><, ><

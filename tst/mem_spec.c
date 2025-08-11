@@ -154,7 +154,7 @@ describe(cspec_realloc) {
         expect(new_mem, == , subject, void*);
         expect(malloc_count to be_one);
 
-        expect(c_array(subject, 5, int) to all_match(test_value));
+        expect(c_array(subject, 5, int) to all_match(test_value), int);
         expect(subject[5], != , test_value, int);
         cspec_memset(&subject[5], '?', sizeof(int));
       }
@@ -167,7 +167,7 @@ describe(cspec_realloc) {
         expect(new_mem, != , subject, int*);
         expect(new_mem to not be_null);
         expect(malloc_count, == , 2, int);
-        expect(c_array(new_mem, 5, int) to all_match(test_value));
+        expect(c_array(new_mem, 5, int) to all_match(test_value), int);
 
         subject = new_mem;
 
