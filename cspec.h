@@ -977,6 +977,7 @@ void cspec_out_clear(void);
 void cspec_out_pad(csUint until_pos, char c);
 void cspec_out_ch(char ch);
 void cspec_out_str(const char* s);
+void cspec_out_slice(const char* s, csSize length);
 void cspec_out_bool(csBool b);
 void cspec_out_byte(char c);
 void cspec_out_hex(char c);

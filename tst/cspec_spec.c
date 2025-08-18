@@ -146,7 +146,9 @@ describe(assertion) {
   }
 
   it("warns because an assert is expected but not thrown") {
+#ifndef assert
     expect(to_warn);
+#endif
     expect(to_assert);
     cspec_assert(FALSE);
   }

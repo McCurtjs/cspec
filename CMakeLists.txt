@@ -1,5 +1,6 @@
 # Option for enabling or disabling memory testing
 option(CSPEC_MEMTEST "Enable memory testing" OFF)
+option(CSPEC_ASSERT "Enable memory testing" OFF)
 
 set(CSPEC_MEMTEST_DEFINES
   "malloc=cspec_malloc"
@@ -9,18 +10,27 @@ set(CSPEC_MEMTEST_DEFINES
   CACHE INTERNAL "Default set of defines for CSpec memory testing"
 )
 
+set(CSPEC_ASSERT_DEFINE
+  "assert=cspec_assert"
+  CACHE INTERNAL "Default definition for CSpec assert testing"
+)
+
 add_library(CSpec)
 target_sources(CSpec PRIVATE cspec.c cspec.h)
 target_include_directories(CSpec PUBLIC ./)
 
 if(CSPEC_MEMTEST STREQUAL ON)
-  target_compile_definitions(CSpec PUBLIC ${CSPEC_MEMTEST_DEFINES} "assert=cspec_assert")
+  target_compile_definitions(CSpec PUBLIC ${CSPEC_MEMTEST_DEFINES})
 
   if(MSVC)
     # These link warnings get thrown because of cspec_malloc and friends defined
     # in cspec.c as they get referenced by other objs.
     target_link_options(CSpec PUBLIC /IGNORE:4217,4286)
   endif()
+endif()
+
+if(CSPEC_ASSERT STREQUAL ON)
+  target_compile_definitions(CSpec PUBLIC ${CSPEC_ASSERT_DEFINE})
 endif()
 
 # If building as a standalone, create the example project

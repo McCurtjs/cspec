@@ -420,7 +420,7 @@ static void _cspec_out_ch(char ch) {
   }
 }
 
-static void _cspec_out_str(const char* s, csSize length) {
+void cspec_out_slice(const char* s, csSize length) {
   if (test.out.index + length >= cspec_max_output_size) {
     length = cspec_max_output_size - test.out.index;
   }
@@ -443,7 +443,7 @@ static void _cspec_out_str(const char* s, csSize length) {
         case 'c': {
           char color_indicator[] = "\033[_;3_m";
           if (test.out.index + sizeof(color_indicator) < cspec_max_output_size) {
-            _cspec_out_str(color_indicator, sizeof(color_indicator) - 1);
+            cspec_out_slice(color_indicator, sizeof(color_indicator) - 1);
           }
         } break;
 #endif
@@ -474,7 +474,7 @@ static void _cspec_out_fmt_continue(void) {
     }
   }
 
-  _cspec_out_str(fmt, i);
+  cspec_out_slice(fmt, i);
   test.out.fmt = next_fmt;
 }
 
@@ -532,7 +532,7 @@ void cspec_out_fmt(const char* fmt) {
 void cspec_out_str(const char* s) {
   if (!s) return;
   csSize length = cspec_strlen(s);
-  _cspec_out_str(s, length);
+  cspec_out_slice(s, length);
   _cspec_out_fmt_continue();
 }
 
@@ -2174,7 +2174,7 @@ int _cspec_run_all(int count, TestSuite* suites[], int argc, char* argv[]) {
   Default backtracing features
 \*----------------------------------------------------------------------------*/
 
-#ifdef _MSC_VER
+#ifdef CSPEC_MSVC
 #define WIN32_LEAN_AND_MEAN
 #include<Windows.h>
 #include<DbgHelp.h>
