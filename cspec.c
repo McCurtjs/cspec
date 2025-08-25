@@ -37,7 +37,7 @@
 # define real_assert(X) assert(X)
 #elif defined(__GNUC__) && defined(__has_builtin)
 # if __has_builtin(__builtin_trap)
-#  define real_assert(CONDITION) (!(CONDITION) ? __builtin_trap() : 0)
+#  define real_assert(CONDITION) (!(CONDITION) ? (__builtin_trap(), 0) : 0)
 # endif
 #elif defined(_MSC_VER)
 # define real_assert(X) (!(X) ? (__debugbreak(), 0) : 0)
