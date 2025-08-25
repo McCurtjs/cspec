@@ -174,7 +174,7 @@ describe(out_byte) {
     }
 
     it("uses the placeholder for max-char") {
-      cspec_out_byte(0xFF);
+      cspec_out_byte((char)0xFF);
     }
 
   }

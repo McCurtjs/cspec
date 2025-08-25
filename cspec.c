@@ -62,6 +62,9 @@ cspec_resolve_user_types_fn cspec_opt_resolve_user_types  = NULL;
 cspec_print_line_fn         cspec_opt_print_line          = NULL;
 cspec_print_backtrace_fn    cspec_opt_print_backtrace     = NULL;
 
+csBool csFalse = 0;
+csBool csTrue = 1;
+
 #define DEFAULT_TABSIZE 2
 
 typedef enum ConsoleColor {

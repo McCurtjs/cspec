@@ -81,6 +81,11 @@ describe(matchers_basic) {
     expect(test to not be_odd);
   }
 
+#ifdef __GNUC__
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wbool-compare"
+#endif
+
   it("checks for exactly true values") {
     expect(TRUE to be_true);
     expect(FALSE to not be_true);
@@ -93,6 +98,10 @@ describe(matchers_basic) {
     test = 7;
     expect(test to not be_true);
   }
+
+#ifdef __GNUC__
+#pragma GCC diagnostic pop
+#endif
 
   it("checks for false values") {
     expect(FALSE to be_false);

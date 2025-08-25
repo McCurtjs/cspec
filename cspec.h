@@ -22,6 +22,9 @@
 * SOFTWARE.
 */
 
+#ifndef CSPEC_H_
+#define CSPEC_H_
+
 /*******************************************************************************
 * This is a custom test library for C based roughly on the RSpec BDD library
 *   in Ruby: https://rspec.info/features/3-12/rspec-core/
@@ -78,15 +81,12 @@
 *       }
 */
 
-#ifndef CSPEC_H
-#define CSPEC_H
-
 typedef _Bool csBool;
 typedef unsigned int csUint;
 typedef unsigned char csByte;
 
-static csBool csFalse = 0;
-static csBool csTrue = 1;
+extern csBool csFalse;
+extern csBool csTrue;
 
 #if defined(__x86_64__) || defined(_WIN64) || defined(__LP_64__)
 # define CSPEC_64
