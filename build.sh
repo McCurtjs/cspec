@@ -1,6 +1,6 @@
 #!/bin/bash
 
-build_target="wasm"
+build_target="gcc"
 build_vers=""
 unit_test=false
 build_type="Debug"
@@ -13,7 +13,7 @@ while [ "$read_args" == true ] && [ "$1" != "" ]; do
     -h | --help)
       echo ": - --       Options"
       echo ": h help                                 : prints this message"
-      echo ": t target   [wasm|gcc|clang|mingw|msvc] : sets build target"
+      echo ": t target   [gcc|clang|wasm|mingw|msvc] : sets build target"
       echo ": c standard [all|23|11|99]              : set C standard version"
       echo ": r release                              : release build (default is debug)"
       echo ": s skip-cmake                           : skips cmake"

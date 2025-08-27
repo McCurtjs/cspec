@@ -131,10 +131,11 @@ static struct InputParams {
   const char* file;         /* filename */
   int line;                 /* filename:l or :l */
   Verbosity verbose;        /* -v or -V or -n */
+  csBool silent;            /* -s */
   csBool padding;           /* -p [n] */
   csBool no_expect_fail;    /* -f */
   csBool skip_memory_test;  /* -m */
-  csBool show_types;        /* -s */
+  csBool show_types;        /* -y */
   csBool show_results;      /* -r */
 } param;
 
@@ -665,7 +666,7 @@ static void _cspec_out_print(ConsoleColor color) {
 
   test.out.buffer[test.out.index] = '\0';
 
-  if (cspec_opt_print_line) {
+  if (cspec_opt_print_line && !param.silent) {
     cspec_opt_print_line(test.out.buffer, test.out.index, color);
   }
 
@@ -1283,14 +1284,12 @@ static void _cspec_mem_check_final(void) {
   /* Ensure malloc / free parity */
   if (test.pass.count_mallocs != test.pass.count_frees) {
     _cspec_log(S_MEMFAIL, 0, NULL, "after: mismatched malloc/free calls");
-    if (test.in_progress) {
-      if (!test.pass.expect_memory_error) {
-        cspec_out_pad(test.out.tabstop + 21, ' ');
-        cspec_out_fmt("mallocs: {}, frees: {}%n");
-        cspec_out_int(test.pass.count_mallocs);
-        cspec_out_int(test.pass.count_frees);
-        _cspec_out_print(CONCOL_White);
-      }
+    if (test.in_progress && !test.pass.expect_memory_error) {
+      cspec_out_pad(test.out.tabstop + 21, ' ');
+      cspec_out_fmt("mallocs: {}, frees: {}%n");
+      cspec_out_int(test.pass.count_mallocs);
+      cspec_out_int(test.pass.count_frees);
+      _cspec_out_print(CONCOL_White);
     }
   }
 
@@ -1935,9 +1934,10 @@ static csBool _cspec_run_param(char c) {
     case 'v': param.verbose = V_RUN; break;
     case 'n': param.verbose = V_NOTES; break;
     case 'V': param.verbose = V_VERY; break;
+    case 's': param.silent = TRUE; break;
     case 'f': param.no_expect_fail = TRUE; break;
     case 'm': param.skip_memory_test = TRUE; break;
-    case 's': param.show_types = TRUE; break;
+    case 'y': param.show_types = TRUE; break;
     case 'r': param.show_results = TRUE; break;
     case 'p': param.padding = TRUE; break;
     default: handled = FALSE;
@@ -1958,7 +1958,7 @@ static const char* _cspec_exe_name(const char* filename) {
 void _cspec_print_help(const char* argv0) {
   const char* exename = _cspec_exe_name(argv0);
 
-  cspec_out_fmt("CSpec 0.1.{} for C version: ");
+  cspec_out_fmt(": CSpec 0.1.{} for C version: ");
   cspec_out_uint(CSPEC_USE_DEDUCTION);
 #ifdef __STDC_VERSION__
   cspec_out_uint(__STDC_VERSION__);
@@ -1968,6 +1968,8 @@ void _cspec_print_help(const char* argv0) {
 #else
   cspec_out_str("mystery");
 #endif
+  _cspec_out_print(CONCOL_White);
+  cspec_out_str(": For documentation, visit https://github.com/mccurtjs/cspec");
   _cspec_out_print(CONCOL_White);
   cspec_out_fmt(
     ":"
@@ -1989,6 +1991,7 @@ void _cspec_print_help(const char* argv0) {
   cspec_out_str(
     ": - -- Options       Args"
     "\n: h help                            : prints this message"
+    "\n: s silent                          : suppresses printed output"
     "\n: n                                 : verbose output (includes user notes)"
     "\n: v verbose                         : verbose output (prints all tests run)"
     "\n: V                                 : verbose output (maximum)"
@@ -1998,9 +2001,8 @@ void _cspec_print_help(const char* argv0) {
   _cspec_out_print(CONCOL_White);
   cspec_out_str(
     ": f force-fails                     : disables 'expect(to_fail)', printing failure output"
-    "\n: r results                         : prints extended results on success (todo)"
     "\n: m ignore-memory                   : disables memory testing"
-    "\n: s show-types                      : prints deduced types in error output"
+    "\n: y show-types                      : prints deduced types in error output"
   );
   _cspec_out_print(CONCOL_White);
 }
@@ -2023,29 +2025,26 @@ static csBool _cspec_run_args(int argc, char* argv[]) {
       if (cspec_streq(arg, "-h") || cspec_streq(arg, "--help")) {
         _cspec_print_help(argv[0]);
         return TRUE;
-
-      } else if (cspec_streq(arg, "--verbose")) {
+      }
+      else if (cspec_streq(arg, "--silent")) {
+        _cspec_run_param('s');
+      }
+      else if (cspec_streq(arg, "--verbose")) {
         _cspec_run_param('v');
-
-      } else if
-      ( cspec_streq(arg, "--force-fails")
-      ) {
+      }
+      else if (cspec_streq(arg, "--force-fails")) {
         _cspec_run_param('f');
-
-      } else if
-      ( cspec_streq(arg, "--results")
-      ) {
+      }
+      else if (cspec_streq(arg, "--results")) {
         _cspec_run_param('r');
-
-      } else if
-      ( cspec_streq(arg, "--ignore-memory")
-      ) {
+      }
+      else if (cspec_streq(arg, "--ignore-memory")) {
         _cspec_run_param('m');
-
-      } else if
-      (  cspec_streq(arg, "-t")
-      || cspec_streq(arg, "--tab-size")
-      ) {
+      }
+      else if (cspec_streq(arg, "--show-types")) {
+        _cspec_run_param('y');
+      }
+      else if (cspec_streq(arg, "-t") || cspec_streq(arg, "--tab-size")) {
         if (i + 1 < argc) {
           char* input = argv[++i];
           int as_i = cspec_atoi(input);
@@ -2056,7 +2055,8 @@ static csBool _cspec_run_args(int argc, char* argv[]) {
           return TRUE;
         }
       }
-    } else {
+    }
+    else {
       /* Find the separation point in the parameter "filename:line" */
       char* s = arg;
       while (*s) {

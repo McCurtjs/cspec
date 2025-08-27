@@ -907,11 +907,10 @@ typedef void (*cspec_print_line_fn)(const char* str, csUint len, csUint color);
 *
 * \param out_size - The amount of space available in the write buffer.
 *
-* \returns The number of characters written to the buffer. Returns 0 if no
-*   characters were written to the buffer, indicating that the type was not
-*   resolved in the user handler and will be written out internally instead.
-*   In this case, if ptyp_N was modified, the updated value will be used to
-*   determine how to write the contents of N.
+* \returns whether or not a value was printed into the output. If true, the
+*   default output will skip the value since it's taken care of. If false, the
+*   printer will continue to look for a matching type and use that method if
+*   available.
 */
 extern cspec_resolve_user_types_fn cspec_opt_resolve_user_types;
 
