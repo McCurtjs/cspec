@@ -442,6 +442,13 @@ void cspec_out_slice(const char* s, csSize length) {
           }
         } break;
 
+        case 't': {
+          const char* tmp = test.out.fmt;
+          test.out.fmt = NULL;
+          cspec_out_pad(test.out.tabstop, ' ');
+          test.out.fmt = tmp;
+        } break;
+
 #ifndef __WASM__
         case 'c': {
           char color_indicator[] = "\033[_;3_m";
@@ -922,9 +929,9 @@ static csBool _cspec_log_param2(const csFmtVar* arg) {
 
     if (written) {
       _cspec_out_fmt_continue();
+      return written;
     }
 
-    return written;
   }
 
   const char* typ_N = arg->type;
@@ -1294,7 +1301,7 @@ static void _cspec_mem_check_final(void) {
     * within the test design rather than memory actually breaking (ie, using
     * `expect(memory_error)` will not succeed if you forget to call malloc)
     */
-    _cspec_log(S_FAILURE, 0, NULL, 
+    _cspec_log(S_FAILURE, 0, NULL,
       "memory error: after: malloc fail requested, but never called"
     );
   }
@@ -1556,8 +1563,9 @@ void* cspec_realloc(void* mem_, csSize nsize) {
 
 void cspec_assert(csBool assertion) {
 
-  real_assert(test.in_progress);
   if (assertion) return;
+  if (!test.in_progress) real_assert(test.in_progress);
+
   test.pass.critical = TRUE;
 
   if (!test.pass.expect_assert) {
@@ -1792,19 +1800,32 @@ csBool _cspec_test_end(void) {
 
   ++test.count;
 
-  /* if an assert was expected but not received, fail the test  */
-  if (test.pass.expect_assert && !test.pass.critical) {
-    _cspec_log(S_FAILURE, 0, NULL, "expected an assert, but received none");
-  }
+  if (!test.pass.critical) {
 
-  /* only check for memory issues if the test hasn't already been failed */
-  if (!test.pass.failed && !param.skip_memory_test) {
-    _cspec_mem_check_final();
+    /* if an assert was expected but not received, fail the test */
+    if (test.pass.expect_assert) {
+      _cspec_log(S_FAILURE, 0, NULL, "expected an assert, but received none");
+    }
+
+    /* only check for memory issues if the test hasn't already been failed */
+    /* also skip these checks when testing for critical behavior (assert jump */
+    /*    will skip cleanup/after clauses */
+    if (!test.pass.failed && !param.skip_memory_test) {
+      _cspec_mem_check_final();
+    }
+
   }
 
   /* if memory errors were expected but didn't happen, it's a test failure */
   if (test.pass.expect_memory_error && !test.pass.memory_error) {
     _cspec_log(S_FAILURE, 0, NULL, "expected memory error, but detected none");
+  }
+
+  /* if memory errors weren't expected but did happen, fail the test */
+  /* memory errors do not count for `expect(to_fail)` */
+  if (test.pass.memory_error && !test.pass.expect_memory_error) {
+    test.pass.failed = TRUE;
+    test.pass.expect_fail = FALSE;
   }
 
   /* each expect(to_warn) must be paired with exactly one warning each */
@@ -2151,7 +2172,9 @@ int _cspec_run_all(int count, TestSuite* suites[], int argc, char* argv[]) {
   }
 
   if (test.count) {
-    ConsoleColor color = (test.count == test.count_passed) ? CONCOL_bGreen : CONCOL_bRed;
+    ConsoleColor color = (test.count == test.count_passed)
+      ? CONCOL_bGreen
+      : CONCOL_bRed;
 
     cspec_out_fmt("Tests passed:%c {} out of {}, or {}%");
     cspec_out_int(test.count_passed);
@@ -2203,6 +2226,7 @@ extern void cspec_default_print_backtrace(void) {
 
   for (int i = 0; i < FRAMES; ++i) {
     SymFromAddr(process, (DWORD64)traces[i], 0, info);
+    cspec_out_fmt("%t  - {}");
     cspec_out_str(info->Name);
     _cspec_out_print(CONCOL_White);
   }
