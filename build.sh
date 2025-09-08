@@ -14,7 +14,7 @@ while [ "$read_args" == true ] && [ "$1" != "" ]; do
       echo ": - --       Options"
       echo ": h help                                 : prints this message"
       echo ": t target   [gcc|clang|wasm|mingw|msvc] : sets build target"
-      echo ": c standard [all|23|11|99]              : set C standard version"
+      echo ": c standard [23|11|99|all]              : set C standard version"
       echo ": r release                              : release build (default is debug)"
       echo ": s skip-cmake                           : skips cmake"
       echo ": -- <args>                              : passes remaining args to built exe (if any)"
@@ -50,7 +50,7 @@ while [ "$read_args" == true ] && [ "$1" != "" ]; do
   shift 1
 done
 
-if [ "$build_vers" == "" ]; then build_vers="23"; fi
+if [ "$build_vers" == "" ]; then build_vers="23 "; fi
 
 # Get make executable
 make_exe="no_make"
@@ -163,13 +163,13 @@ elif [ "$build_target" = "gcc" ]; then
   "
   success="0"
 
-  echo "$build_vers"
-
   if [[ "$build_vers" =~ "23" ]]; then
     gcc -std=c2x -o build/gcc/test.exe $sources_test $flags_common -pedantic
     success="$?"
     if [ "$success" == "0" ]; then
-      echo "C23"
+      if [ "$build_vers" != "23 " ]; then
+        echo ": C23"
+      fi
       ./build/gcc/test.exe $args
       success="$?"
     fi
@@ -179,7 +179,9 @@ elif [ "$build_target" = "gcc" ]; then
     gcc -std=c11 -o build/gcc/test11.exe $sources_test $flags_common
     success="$?"
     if [ "$success" == "0" ]; then
-      echo "C11"
+      if [ "$build_vers" != "11 " ]; then
+        echo ": C11"
+      fi
       ./build/gcc/test11.exe $args
       success="$?"
     fi
@@ -189,35 +191,13 @@ elif [ "$build_target" = "gcc" ]; then
     gcc -std=c99 -o build/gcc/test99.exe $sources_test $flags_common
     success="$?"
     if [ "$success" == "0" ]; then
-      echo "C99"
+      if [ "$build_vers" != "99 " ]; then
+        echo ": C99"
+      fi
       ./build/gcc/test99.exe $args
       success="$?"
     fi
   fi
-
-
-  exit
-
-  #if [ "$success" ]; then echo "blah"; fi
-
-  #if [ "$success" == "0" ] && ./build/gcc/test.exe $args && success="$?";
-  #[ "$success" == "0" ] && echo "Hello!";
-  #[ "$success" == "0" ] && success=`gcc -std=c11 -o build/gcc/test_11.exe $gcc_params`
-  #[ "$success" == "0" ] && success=`./build/gcc/test_11.exe $args`
-
-
-
-#  if [ "$?" == "0" ]; then
-#    ./build/gcc/test.exe $args
-#
-#    if [ "$?" == "0" ]; then
-#      gcc -std=c11 -o build/gcc/test_c11.exe cspec.c tst/cspec_spec.c tst/test_main.c -I ./
-#
-#      if [ "$?" == "0" ]; then
-#        ./build/gcc/test.exe $args
-#      fi
-#    fi
-#  fi
 
 # CMake MinGW on Windows with GCC
 elif [ "$build_target" = "mingw" ]; then

@@ -110,7 +110,7 @@ describe(tests) {
 
     expect(to_fail);
 
-    it("'test_fail' just causes a test to outright fail") {
+    it("unconditionally fails the test with a message") {
       cspec_fail("I failed because I felt like it");
     }
 

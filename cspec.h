@@ -555,7 +555,7 @@ typedef struct TestSuite {
 
 /*
 * \brief Checks that a given value is NULL.
-* 
+*
 * \param - `expect(ptr to be_null);`
 * \param - `expect(ptr to not be_null);`
 * \param - `expect(cspec_malloc to not be_null given(sizeof(int)));`
@@ -1265,7 +1265,7 @@ void cpyptr(void* dst, const void* src, csSize size);
 #
 # define _param_mty(N, P, ...)
 # define _param_def(N, P, ...) AUTO_DUP(MACRO_CONCAT(_P, N), (P));
-# define _param_arg(N, P, ...) _cspec_fvar(&MACRO_CONCAT(_P, N), MACRO_CONCAT(_P, N), _type_s(P)), 
+# define _param_arg(N, P, ...) _cspec_fvar(&MACRO_CONCAT(_P, N), MACRO_CONCAT(_P, N), _type_s(P)),
 # define _param_str(N, P, ...) "\nparam "#N": {}"
 #
 # define _param_fn_def(...) _csva_exp(_param_def, _param_mty, __VA_ARGS__)
@@ -1526,7 +1526,7 @@ void cpyptr(void* dst, const void* src, csSize size);
 /*       _inner expectation name and params             Pre-test input copy and setup             Test result setup         (fn param defs)   Test pass check   Output for failed test */
 #if CSPEC_USE_DEDUCTION < 1
 # define _expect_fn_mtyp(S, F, n, M, B, u, _, P, T, ...)       T _R = (F P);         T _S = (B);  csBool _test = M(_R, _S);                   if (!_test ^ n)   _cspec_fail_fn_match(F, M, B, P, u, n, #T, &_R, #T, &_S)
-# define _expect_mtyp(S, A, n, F, B, u, _, T, ...)             T _R = (A);           T _S = (B);  csBool _test = F(_R, _S);                   if (!_test ^ n)   _cspec_fail_match(A, B, _R, _S, #T, u(#F), n); 
+# define _expect_mtyp(S, A, n, F, B, u, _, T, ...)             T _R = (A);           T _S = (B);  csBool _test = F(_R, _S);                   if (!_test ^ n)   _cspec_fail_match(A, B, _R, _S, #T, u(#F), n);
 # define _expect_mtch(S, A, n, F, B, u, ...)                                                      csBool _test = F((A), (B));                 if (!_test ^ n)   _cspec_fail_match(A, B, (A), (B), "?", u(#F), n);
 # define _expect_expr(S, A, x, B, ...)                  _deduct_warn("expect(lhs, "#x" , rhs, <type>)");                                      if (!(A x B))     cspec_fail("expected "#A" "#x" "#B)
 # define _expect_comp(S, A, M, ...)                                                               csBool _test = M(A);                        if (!_test)       cspec_fail("expected "S)
@@ -1622,7 +1622,7 @@ void cpyptr(void* dst, const void* src, csSize size);
 
 #define _all(M, T_CON)              FALSE; csBool _print_expected_value = FALSE; _all_comp,       M,                ><, ><,   T_CON, ><, ><, ><, ><
 #define _all_be(x, B, T_CON)        FALSE; csBool _print_expected_value = TRUE;  _all_comp_be,    x,                B,  ><,   T_CON, ><, ><, ><, ><
-#define _all_match(B, T_CON, T_EL)  FALSE; csBool _print_expected_value = TRUE;  _all_comp_match, _all_match_setup, B,  T_EL, T_CON, ><, ><, ><, ><
+#define _all_match(B, T_CON, CMP)   FALSE; csBool _print_expected_value = TRUE;  _all_comp_match, _all_match_setup, B,  CMP, T_CON, ><, ><, ><, ><
 
 #define _all_select(M, T_CON, ...)                    _all(M, T_CON)
 #define _all_be_select(x, B, T_CON, ...)              _all_be(x, B, T_CON)
