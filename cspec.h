@@ -301,91 +301,23 @@ typedef struct TestSuite {
 *   output for the operations being tested. The value or expression passed is
 *   expected to evaluate to TRUE, otherwise, the test aborts as a failure.
 *
-* \brief The expect statement can be given in many formats. The basic forms are
-*   described below:
+* \brief The expect statement can be given in many formats. The general forms
+*   are described below. For more info on each, please check the README.
 *
-* \param - `expect(<condition>);` - ex: `expect(var == 5); expect(var < c);
-*   expect(str_eq(a, b));` etc. Does any truthy test, but output is limited to
-*   the string equivalent of `condition`. The benefit of course is that this
-*   can be used for just about anything.
-*
-* \param - `expect(A, <operator>, B);` - ex: `expect(a, == , b);` - Similar to
-*   the above, but with options separated by commas. The difference is that it
-*   will determine the types and print the values of A and B on a failed test.
-*   Note: determining types won't work in versions older than C11.
-*
-* \param - `expect(A, <operator>, B, <type>);` - ex: `expect(a, < , b, float);`
-*   Same as above, but A and B will be explicitly converted to TYPE, and will
-*   have their values printed in addition to the expression.
-*
-* \param - `expect(A, <operator>, B, <type_A>, <type_B>)` - Same as above, but
-*   A and B are treated as separate types for output.
-*
-* \param - `expect(<directive>);` - ex: `expect(to_fail);` - Sets a general
-*   expectation for the test or sets some kind of internal execution state.
-*
-* \param - `expect(A to <matcher>)` - ex: `expect(a to be_positive);` - Tests
-*   the value of A against the given matcher expression. Matchers can be made
-*   in a variety of forms, and are described individaully below.
-*
-* \param - `expect(A to match(B, <function>));` - ex:
-*   `expect(str to match("test", str_eq));` - Tests the result of a function
-*   called as `function(A, B)`. Intended for functions that test equality of
-*   custom types.
-*
-* \param - `expect(<function> to <matcher> given(<params>));` - ex:
-*   `expect(v3cross to be_about(0.4f) given(vec1, vec2));` - Tests the result
-*   of a function with the given parameters against the given matcher.
-*
-* \param - `expect(<function> to be( <operator> , B) given(<params>));` - ex:
-*   `expect(get_sum to be( == , 6) given(1, 2, 3));` - Tests the result
-*   of a function with given parameters against the given expression.
-*
-* \param - `expect(cont to all(<matcher>, TYPE, TYPE_CON));` - Tests all values
-*   of the given container `cont` against the given matcher. See description
-*   of `all` for details.
-*
-* \param - `expect(cont to all_be(<operator>, B, TYPE, TYPE_CON));` - Tests all
-*   values of the given container `cont` against the expression described by
-*   `<element> <operator> B` (ex: `arr[n] > 5`). See description of `all_be`
-*   for details.
-*/
-
-/*
-* \brief An `expect` clause within a test is used to check the validity of
-*   output for the operations being tested. The value or expression passed is
-*   expected to evaluate to TRUE, otherwise, the test aborts as a failure.
-*
-* \brief The expect statement can be given in many formats. The basic forms are
-*   described below. For more info on each, please check the /doc directory:
+* \brief Note: Items in angle-brackets are optional outside of C99.
+* \brief Note: When used == can be replaced with any operator (<, <=, >, >=, !=)
 *
 * \param - `expect(<expression>)`
 * \param - `expect(<directive>)`
-* \param - `expect(A, <operator> , B)`
-* \param - `expect(A, <operator> , B, <Type>)`
-* \param - `expect(A, <operator> , B, <Type A>, <Type B>)`
-* \param - `expect(A to be(<operator>, B))`
-* \param - `expect(A to match(B))`
+* \param - `expect(A, == , B, <Type>)`
+* \param - `expect(A to be(==, B), <Type>)`
 * \param - `expect(A to match(B), <Type>)`
-* \param - `expect(A to be_<matcher>)`
 * \param - `expect(A to be_<matcher>, <Type>)`
-* \param - `expect(<function> to be(<operator>, B) given(<FN Params>))`
-* \param - `expect(<function> to be(<operator>, B) given(<FN Params>), <Type>)`
-* \param - `expect(<function> to be_<matcher> given(<Params>))`
-* \param - `expect(<function> to be_<matcher> given(<Params>), <Type>)`
-* \param - `expect(<function> to match(B) given(<FN Params>))`
-* \param - `expect(<function> to match(B) given(<FN Params>), <FN Return Type>)`
-* \param - `expect(<container> to all_be(<operator> , B))`
-* \param - `expect(<container> to all_be(<operator> , B, <Con. Type>, <Type>))`
-* \param - `expect(<container> to all(be_<matcher>))` // defaults to c_array
-* \param - `expect(<container> to all(be_<matcher>, <Container Type>))`
+* \param - `expect(<function> to be(==, B) given(Params...), <Type>)`
+* \param - `expect(<function> to be_<matcher> given(Params...), <Type>)`
+* \param - `expect(<function> to match(B) given(Params...), <Type>)`
+* \param - `expect(<container> to all_be(== , B, <Container Type>), <Type>)`
 * \param - `expect(<container> to all(be_<matcher>, <Container Type>), <Type>)`
-* \param - `expect(<container> to all(be_<matcher>), <Type>)`
-* \param - `expect(<container> to all_match(B))`
-* \param - `expect(<container> to all_match(B), <Type>)`
-* \param - `expect(<container> to all_match(B, <Con. Type>))`
-* \param - `expect(<container> to all_match(B, <Con. Type>), <Type>)`
-* \param - `expect(<container> to all_match(B, <Con. Type>, <EQ FN>))`
 * \param - `expect(<container> to all_match(B, <Con. Type>, <EQ FN>), <Type>)`
 */
 #define expect(...)               _expect_va(#__VA_ARGS__, __VA_ARGS__)
@@ -653,27 +585,31 @@ typedef struct TestSuite {
 #define equal(B)                  ==, B
 
 /*
-* \brief Evaluates the result of a function given two arguments. This is
-*   functionally the same as `expect(function(subject, param_2))` except that
-*   it can deduce the types of and print the function arguments and result.
+* \brief Performs an equivalence check on two values. By default, this means
+*   comparing both operands for bitwise equivalence using `memcmp`. In C11 and
+*   further, it also will compare strings/`char*` as null-terminated strings
+*   using an equivalent of `strcmp`. All other pointers will be compared for
+*   binary quivalence rather than the equality of the objects they point to.
 *
-* \brief The intent with this is to check results of comparison functions,
-*   though it can be used for any function that takes two arguments, it is
-*   best suited for functions that check for equality of custom types (such as
-*   a function that checks equality of a string or vector).
+* \brief Note: because this does a direct memory comparison, this can be very
+*   useful for checking structs.
 *
+* \brief Additional overrides for custom types can be used by providing a
+*   definition for `CSPEC_CUSTOM_MATCH_FNS` (C11+) before including the header.
+*   This should be defined as `type: comparison, type2: compare2` etc. The
+*   custom comparison functions should take two arguments and return true if
+*   they're equal to each other.
+*
+* \brief Without using the `CSPEC_CUSTOM_MATCH_FNS` macro (and in C99), a
+*   custom match function can be provided as an additinoal argument.
+*
+* \brief Example: `expect(subject to match(value));`
 * \brief Example: `expect(subject to match(param_2, function));`
+* \brief Example: `expect(subject to match(thing, function), int);`
 *
 * \param B - The value to test the subject against, second parameter to fn
 *
 * \param fn - The function to be called
-*
-* TODO: Replace with generic call that deduces an equality function rather than
-*   manually specifying one. The default (unknown type) should use cspec_memeq
-*   for direct equality comparisons. This will work with basic types, struct
-*   types, and a mode for char* can be included that uses streq. Resulting
-*   expressions take the form: expect(lhs to match(rhs));
-* - Bonus round: have failed results print the funciton used.
 */
 #define match(...)                _match_va(__VA_ARGS__)
 
@@ -700,26 +636,13 @@ typedef struct TestSuite {
 * \brief In order to function, the container must support a "foreach_index"
 *   macro that functions in the same way as c_array_foreach_index.
 *
-* \brief Example: `expect(arr to all(be_positive, int, c_array));`
+* \brief Example: `expect(arr to all(be_null));`
+* \brief Example: `expect(arr to all(be_positive, c_array), int);`
+* \brief Example: `expect(arr to all(be_about(samples[n]), c_array), float);`
+* \brief Example: `expect(arr to not all(be_null));`
+* \brief Example: `expect(arr to all(not be_null));`
 *
-* \brief Example: `expect(arr to all(be_about(samples[n]), float, c_array));`
-*
-* \brief Example: `expect(arr to all(my_fn, rhs, int, c_array));`
-*
-* \param M - A regular matcher, such as be_positive, or be_within(A, B), or a
-*   function that takes the container element as its first of up to two
-*   arguments.
-*
-* \param value [opt] - A value to pass to the matcher as a second parameter if
-*   needed. The value to compare against can either be a single value to use
-*   across the whole array, or it can be passed as a piecewise comparison by
-*   using `value[n]`. Notes: bounds are not checked, so first ensure the input
-*   container is of the correct size. This value is not side-effect safe; it
-*   will be evaluated for every iteration of the loop.
-*
-* \param T_elem - The type of the elements in the container. Note: this should
-*   be the actual type of the elements in the container, not the pointer type
-*   expected to be returned from, say, TYPE_get() (ie, void*).
+* \param M - A regular matcher, such as be_positive, or be_within(A, B).
 *
 * \param T_cont - The type of container. This value is not the actual type name
 *   of the container's struct, but the associated prefix before a
@@ -728,22 +651,25 @@ typedef struct TestSuite {
 #define all(...)                  _all_va(__VA_ARGS__)
 
 /*
-* \brief Alternate explicit alias for using a function with second parameter as
-*   a matcher. Functions the same as calling `expect(lhs to match(fn, value))`
-*   on each element of the container.
+* \brief Applies the `match` logic to each element of the container. Functions
+*   the same as calling `expect(lhs to match(fn, value))` on each element of
+*   the container.
 *
-* \brief Example: `expect(arr to all_match(my_fn, rhs, int, c_array));`
+* \brief Example: `expect(arr to all_match(value));`
+* \brief Example: `expect(arr to all_match(value), int);`
+* \brief Example: `expect(arr to not all_match(value, c_array), float);`
+* \brief Example: `expect(arr to all_match(value, c_array, eq_fn));`
 *
-* \param value - The value to test each subject with, second parameter to fn.
-*
-* \param matcher - A function or macro that takes two arguments and returns a
-*   boolean value.
-*
-* \param T_el - The type of the elements in the container.
+* \param value - The value to test each subject with, second parameter to the
+*   matching function.
 *
 * \param T_cont - The type of container. This value is not the actual type name
 *   of the container's struct, but the associated prefix before a
 *   _foreach_index macro (ex: c_array).
+*
+* \param matcher - A function or macro that takes two arguments and returns a
+*   boolean value. If not provided, the default will be used (either memcmp,
+*   or strcmp for string values in C11+).
 */
 #define all_match(...)            _all_match_va(__VA_ARGS__)
 
@@ -752,9 +678,9 @@ typedef struct TestSuite {
 *   composing other matchers, it applies a basic expression to every element
 *   in the container, as if calling `expect(<expression>)` on them.
 *
-* \brief Example: `expect(arr to all_be( > , 7, int, c_array));`
-*
-* \brief Example: `expect(arr to all_be( == , data[n], int, c_array));`
+* \brief Example: `expect(arr to all_be( < , 4));`
+* \brief Example: `expect(arr to all_be( > , 7, c_array), int);`
+* \brief Example: `expect(arr to all_be( == , data[n], c_array), bool);`
 *
 * \param op - A basic C comparison operator (==, !=, >, <, >=, <=)
 *
@@ -763,8 +689,6 @@ typedef struct TestSuite {
 *   will not be checked, so perform an expect(result.size == x) first.
 *   Note: this parameter is NOT side-effect safe; it will be evaluated in
 *   every iteration of the loop.
-*
-* \param T_elem - The type of the elements of the container
 *
 * \param T_cont - The type of the container. Like with the `all` matcher, this
 *   is not an actual type name of an object/struct, but a prefix used by
@@ -894,6 +818,10 @@ typedef void (*cspec_print_line_fn)(const char* str, csUint len, csUint color);
 * \brief A function pointer that is initially null, but can be set by a user to
 *   describe how to print custom types without having to modify cspec.c.
 *
+* \brief To print the value, use the `cspec_out_*` set of functions. You do not
+*   need to begin the log line with `cspec_log_start`, and should not end the
+*   print using `cspec_out_print` - those will be handled internally.
+*
 * \param &p_type - a pointer to a pointer to c-string containing the name of
 *   the type to convert. You can compare this to a typename you've defined,
 *   and either add a custom handler to write output to the buffer, or you can
@@ -902,15 +830,6 @@ typedef void (*cspec_print_line_fn)(const char* str, csUint len, csUint color);
 *   == 0) { *ptyp_N = "int"; return 0; }` to set MyInt as an alias for int.
 *
 * \param value - A pointer to the object being written.
-*
-* \param out_buffer - The char buffer that can be written to.
-*
-* \param out_size - The amount of space available in the write buffer.
-*
-* \returns whether or not a value was printed into the output. If true, the
-*   default output will skip the value since it's taken care of. If false, the
-*   printer will continue to look for a matching type and use that method if
-*   available.
 */
 extern cspec_resolve_user_types_fn cspec_opt_resolve_user_types;
 
@@ -937,13 +856,15 @@ extern cspec_print_line_fn cspec_opt_print_line;
 extern cspec_print_backtrace_fn cspec_opt_print_backtrace;
 
 /*
-* \brief Default backtrace function
+* \brief Default backtrace function (currently only supports Windows).
 */
 void cspec_default_print_backtrace(void);
 
 /*
 * \brief Sets the execution line selector. This has the same behavior as passing
-*   an argument to the command line in the form ":#".
+*   an argument to the command line in the form ":#". This is intended to be
+*   called before execution of the tests in `main`, and is used by the WASM test
+*   runner in order to replicate the terminal functionality.
 */
 void cspec_set_line(int line);
 
@@ -1705,5 +1626,18 @@ void cpyptr(void* dst, const void* src, csSize size);
 # define _be_within_va(...)  _be_within_select(__VA_ARGS__/*B, C*/, inclusive, int, 0, 1, 0)
 # define _be_between_va(...) _be_between_select(__VA_ARGS__/*B, C*/, inclusive, int, 0, 1, 0)
 #endif
+
+/* TODO: change `expect` statement format to allow for simpler parameterized  */
+/*    matchers using comma offsets: if the matcher options were shifted some  */
+/*    extra spaces over, the following implementation would be possible given */
+/*    enough trailing commas at the end of the matcher definition:            */
+/*                                                                            */
+/* #define be_between(A, B, C) ((B) <= (A) && (A) <= (C)) , >< , ><           */
+/*                                                                            */
+/* Using this style of pattern wouldn't require any temp variables, and as    */
+/*    such it wouldn't require any alternate `typed` variant, or type info in */
+/*    the matcher itself. The tradeoff would be that side-effects (like       */
+/*    function calls or pre/post-increments) would be applied twice for A.    */
+
 
 #endif

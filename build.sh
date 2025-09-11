@@ -1,12 +1,15 @@
 #!/bin/bash
 
-build_target="gcc"
+build_target=""
 build_vers=""
 unit_test=false
 build_type="Debug"
 skip_cmake=false
+clean=false
+clean_only=false
 args=""
 read_args=true
+open=false
 
 while [ "$read_args" == true ] && [ "$1" != "" ]; do
   case "$1" in
@@ -17,12 +20,20 @@ while [ "$read_args" == true ] && [ "$1" != "" ]; do
       echo ": c standard [23|11|99|all]              : set C standard version"
       echo ": r release                              : release build (default is debug)"
       echo ": s skip-cmake                           : skips cmake"
+      echo ": o open                                 : opens the project file for the msvc target"
       echo ": -- <args>                              : passes remaining args to built exe (if any)"
       exit
       ;;
     -- )
       args="$@"
       read_args=false
+      ;;
+    --clean )
+      clean=true
+      clean_only=true
+      ;;
+    --rebuild )
+      clean=true
       ;;
     -t | --target)
       build_target="$2"
@@ -35,6 +46,9 @@ while [ "$read_args" == true ] && [ "$1" != "" ]; do
         build_vers+="$2 "
       fi
       shift 1
+      ;;
+    -o | --open)
+      open=true
       ;;
     -r | --release)
       build_type="Release"
@@ -50,6 +64,24 @@ while [ "$read_args" == true ] && [ "$1" != "" ]; do
   shift 1
 done
 
+# Clean files from build target
+if [ $clean = true ]; then
+  if [ "$build_target" = "" ]; then
+    echo ": Deleting build files for all targets"
+    rm -rf build
+  else
+    echo ": Deleting build files for $build_target"
+    rm -rf ./build/$build_target
+  fi
+
+  if [ $clean_only = true ]; then
+    echo ": Done"
+    exit
+  fi
+  echo ": Continuing build..."
+fi
+
+if [ "$build_target" == "" ]; then build_target="gcc"; fi
 if [ "$build_vers" == "" ]; then build_vers="23 "; fi
 
 # Get make executable
@@ -222,8 +254,14 @@ elif [ "$build_target" = "mingw" ]; then
 elif [ "$build_target" = "msvc" ]; then
 
   cmake -G "Visual Studio 17 2022" -S . -B build/msvc
+
   if [ "$?" != "0" ]; then
     exit
+  fi
+
+  if [ "$open" == true ]; then
+    echo ": Opening Visual Studio"
+    start ./build/msvc/CSpec.sln
   fi
 
 # No matching build types

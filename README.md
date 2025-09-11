@@ -466,6 +466,26 @@ gcc $sources $includes lib/cspec/cspec.c -I lib/cspec \
     -Dmalloc=cspec_malloc -Dfree=cspec_free -Drealloc=cspec_realloc -Dcalloc=cspec_calloc
 ```
 
+Most memory issues will casue the associated record to be printed as a hex dump, or the target block if it's in scope.
+
+Example output:
+
+```C
+cspec_malloc("This allocates a string without deleting.");
+...
+in file: tst/mem_spec.c
+  in function (301): test_cspec_malloc_errors
+    test [310] it ensures parity between malloc and free
+      memory error: after: allocated memory not freed
+        0x00007FF7D13089B7:  FF FF FF FF FF FF FF FF FF 62 62 62 62 62 62 62 - .........bbbbbbb
+        0x00007FF7D13089C7-> 54 68 69 73 20 61 6C 6C 6F 63 61 74 65 73 20 61 = This allocates a
+        0x00007FF7D13089D7:  20 73 74 72 69 6E 67 20 77 69 74 68 6F 75 74 20 -  string without
+        0x00007FF7D13089E7:  64 65 6C 65 74 69 6E 67 2E 00 65 65 65 65 65 65 - deleting..eeeeee
+        0x00007FF7D13089F7:  65 58 58 58 58 58 58 58 58 58 58 58 58 58 58 58 - eXXXXXXXXXXXXXXX
+      memory error: after: mismatched malloc/free calls
+                           mallocs: 1, frees: 0
+```
+
 </details>
 
 <details>
@@ -481,7 +501,9 @@ This can be enabled with `-Dassert=cspec_assert` and linking against the standar
 
 Note: Currently, the definition of cspec_assert has to be provided somewhere in source files for it to link correctly.
 
-Asserts can also be expected using <a href="#expect_directive">the directive</a> `expect(to_assert)`.
+Asserts can also be expected using <a href="#expect_directive">the directive</a> `expect(to_assert)`. An expected assert will not fail the test, but instead be required in order to pass.
+
+For assertions that are not expected, a stack trace can be printed by providing an implementation for `cspec_opt_print_backtrace`. A default backtrace implementation (currently only supports Windows and requires linking to DbgHelp) can be applied by assigning the optional value to `cspec_default_print_backtrace` in `main` before execution.
 
 </details>
 
@@ -628,7 +650,7 @@ in file: tst/expr_spec.c
 <details>
 <summary><tt>expect(A to &lt;matcher&gt;)</tt></summary>
 
-Matchers are small comparison functions to check the test value against a given condition. These are generally written as `be_X`. A type can be provided to explicitly define the type of the test variable for value output. If not provided, it can be deduced in C23. Some compound matchers can take arguments as settings for the match.
+Matchers are small comparison functions to check the test value against a given condition. These are generally written as `be_X`. A type can be provided to explicitly define the type of the test variable for value output. If not provided, it can be deduced in C23. Some compound matchers can take arguments as settings for the match. To add additional simple custom matchers, see the section on extensibility.
 
 Any matcher can be negated using `not` in front of the matcher.
 
@@ -683,6 +705,21 @@ in file: tst/matcher_spec.c
 C11 forward, if a type match is found for each variable, the value printed on a failed test will use that type. If the type is not matched, the output will use a generic printer that shows a dump of the object's memory. To add custom types for printing, see the section on <a href="#type_handling">Custom Types</a>.
 
 Note: Comparisons done with `match` can't compare against literal values (the operands must be addressable).
+
+Example output:
+
+```C
+TestStructInts A = { .x = 1819043144, .y = 1752440943, .z = 6648421 }; // arbitrary struct
+char B[] = "Hello there";
+expect(A to not match(B));
+...
+in file: tst/matcher_spec.c
+  in function (687): test_matcher_match_failed
+    test [807] it should expect A to NOT match B
+      Line 810: expected A to not match B
+                value 1: 48 65 6C 6C 6F 20 74 68 (Hello th)
+                value 2: 0x00000003B21FEBF8: "Hello there"
+```
 
 ```C
 expect(A to match(B));
@@ -770,6 +807,18 @@ expect(<container> to all_be( == , other[n]));
 expect(<container> to not all_be( == , B));
 expect(<container> to all_be( != , B));
 expect(<container> to not all_be( != , B));
+```
+
+Example output:
+
+```C
+expect(my_arr to all_be( > , 10));
+...
+in file: tst/container_spec.c
+  in function (134): test_all_fail
+    test [141] it should find -7 on iteration 2
+      Line 142: expected arr to all_be( > , 10, c_array)
+                but found -7 on iteration 2
 ```
 
 </details>
@@ -950,5 +999,33 @@ int* c_array_foreach_index(value, i, box) {
     cspec_out_print();
 }
 ```
+
+</details>
+
+<details>
+<summary id="custom_matchers">4. Custom Matchers</summary>
+
+Basic matchers can easily be added by creating a macro in the form:
+
+```C
+#define be_matcher(A) // any test involving only A
+...
+expect(something to be_matcher);
+```
+
+To easily re-use this kind of matcher, or any of the other pre-defined hooks like additional types or match comparison functions, they can be added to a separate header that includes `cspec.h`, and then use that header instead in your test spec c files.
+
+More complex parameterized matchers can also be created, but are a bit difficult to implement correctly. For more information on how these work, check the implementation for `_matcher_setup` near the end of `cspec.h`. In short, any parameters used need to be saved in variables before the matcher can gain access to the value of `A`, the left-most parameter in any `expect` statement.
+
+The general form for one of these would be something like the following (assuming C23 for simplicity - the additional setup macros for `be_between` and the like exist to handle additinoal passing of optional type information):
+
+```C
+#define _be_matcher_ext(A) (A); _test ^= <expression using _A and _B in place of A and B>
+#define be_matcher(B) FALSE; typeof(B) _B = (B); typeof(B) _A =
+...
+expect(lhs to be_matcher(rhs));
+```
+
+Unfortunately, there isn't a way with the current setup to create a macro using a more simple `#define m(A, B)` pattern.
 
 </details>
