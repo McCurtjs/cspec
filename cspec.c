@@ -947,7 +947,6 @@ static csBool _cspec_log_param2(const csFmtVar* arg) {
   ||  cspec_strrstr(typ_N, "byte*")
   ||  cspec_strrstr(typ_N, "csByte*")
   ||  cspec_strrstr(typ_N, "unsigned char*")
-  ||  cspec_strrstr(typ_N, "char[]")
   ) {
     cspec_out_ptr(N);
     cspec_out_str(": \"");
@@ -957,6 +956,9 @@ static csBool _cspec_log_param2(const csFmtVar* arg) {
     cspec_out_str(*(const char**) N);
 #endif
     cspec_out_ch('"');
+  }
+  else if (cspec_strrstr(typ_N, "char[]")) {
+    cspec_out_str((const char*)N);
   }
   else if (cspec_streq(typ_N, "c str")) {
     /* for hard-coded c-strings passed to the logger */

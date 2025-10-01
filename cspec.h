@@ -1127,6 +1127,12 @@ void cpyptr(void* dst, const void* src, csSize size);
 #   define _CSPEC_CUSTOM_TYPE_C
 # endif
 #
+# if CSPEC_USE_DEDUCTION > 2 && !defined(__clang__)
+#   define _CSPEC_NULLPTR_T nullptr_t: "void*", const nullptr_t: "const void*",
+# else
+#   define _CSPEC_NULLPTR_T
+# endif
+#
 # if CSPEC_USE_DEDUCTION == 1
 #   /* Without typeof, we're not able to differentiate between arrays and     */
 #   /*    pointers, so we'll just decay to pointers                           */
@@ -1151,7 +1157,7 @@ void cpyptr(void* dst, const void* src, csSize size);
 /* Adding a 'default' field can allow custom types to be used in an "expect fn to be_something given(custom1, custom2)" */
 /*    format, but then it won't be obvious that the type is not supported, and the output will not be useful            */
 # define _type_s(X) _Generic((X), void*: "void*", const void*: "const void*",                                         \
-  CSPEC_CUSTOM_TYPES _CSPEC_CUSTOM_TYPE_C  _type_s_h(X, _Bool),                                                       \
+  _CSPEC_NULLPTR_T CSPEC_CUSTOM_TYPES _CSPEC_CUSTOM_TYPE_C  _type_s_h(X, _Bool),                                      \
   _type_s_h(X, char),  _type_s_h(X, short), _type_s_h(X, int),    _type_s_h(X, long),   _type_s_h(X, long long),      \
   _type_s_h(X, unsigned char), _type_s_h(X, unsigned short),      _type_s_h(X, unsigned int),                         \
   _type_s_h(X, unsigned long), _type_s_h(X, unsigned long long),  _type_s_h(X, float),  _type_s_h(X, double)          \
