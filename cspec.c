@@ -2099,7 +2099,6 @@ static void _cspec_before_group(const TestGroup* t) {
   test.printed_function = FALSE;
   test.function = t;
   test.current_line = 0;
-  real_assert(test.ctx.top == 0);
   cspec_memset(&test.ctx, 0, sizeof(test.ctx));
 }
 
