@@ -921,6 +921,8 @@ static csBool _cspec_log_param2(const csFmtVar* arg) {
   }
 
   csBool written = TRUE;
+  const char* typ_N = arg->type;
+  const void* N = arg->value;
 
   if (cspec_opt_resolve_user_types) {
     const char* old_fmt = test.out.fmt;
@@ -929,14 +931,25 @@ static csBool _cspec_log_param2(const csFmtVar* arg) {
     test.out.fmt = old_fmt;
 
     if (written) {
+
+      if (param.show_types) {
+        cspec_out_fmt_begin();
+        cspec_out_str(" [ ");
+        if (arg->type) {
+          cspec_out_str(typ_N);
+        }
+        else {
+          cspec_out_str("<NULL>");
+        }
+        cspec_out_str(" ]");
+        cspec_out_fmt_end();
+      }
+
       _cspec_out_fmt_continue();
       return written;
     }
 
   }
-
-  const char* typ_N = arg->type;
-  const void* N = arg->value;
 
   csBool is_size_t = cspec_streq(typ_N, "size_t")
                   || cspec_streq(typ_N, "csSize");
