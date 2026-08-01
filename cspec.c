@@ -1263,8 +1263,9 @@ static void _cspec_mem_check_final(void) {
 
   /* Check barrier fences */
   for (csSize i = 0; i < memory_size_barrier; ++i) {
+    csSize right_offset = memory_size_barrier + cspec_max_memory_pool_size;
     if (0xFF != test.mem.buffer[i]
-    ||  0xFF != test.mem.buffer[i + memory_size_barrier + memory_size_max]
+    ||  0xFF != test.mem.buffer[i + right_offset]
     ) {
       _cspec_log(S_MEMFAIL, 0, NULL, "after: arena barrier broken");
     }
