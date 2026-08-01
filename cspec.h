@@ -112,12 +112,12 @@ typedef struct TestSuite {
 
 #ifndef memory_size_max
 /*
-* \brief Test scratch-size for memory testing with malloc.
+* \brief Test scratch-size for memory testing with malloc, defaults to 8 pages.
 *
 * \brief Note: This does not account for space for fences between allocations,
 *    the actual available space you can allocate will be lower.
 */
-# define cspec_max_memory_pool_size 4096
+# define cspec_max_memory_pool_size (4096 * 8)
 #endif
 
 #ifndef cspec_max_memory_allocs
